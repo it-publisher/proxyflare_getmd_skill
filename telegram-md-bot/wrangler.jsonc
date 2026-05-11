@@ -9,8 +9,8 @@
 	},
 	// Secrets (set via: npx wrangler secret put <NAME>)
 	// TELEGRAM_BOT_TOKEN
-	// ALLOWED_CHAT_ID
-	"vars": {
-		"PROXYFLARE_WORKERS": "[\"https://proxyflare-1771765050-ofdfhl.guides.workers.dev\",\"https://proxyflare-1771765050-dnfqud.guides.workers.dev\",\"https://proxyflare-1771765050-prjxuc.guides.workers.dev\"]",
-	},
+	// ALLOWED_CHAT_ID  ← admin chat ID
+	"kv_namespaces": [
+		{ "binding": "ALLOWED_USERS", "id": "6a23095750454a4aa7df6432cee84901" },
+	],
 }

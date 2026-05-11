@@ -11,7 +11,7 @@ vi.mock("../src/scraper", () => ({
 		const match = text.match(/https?:\/\/[^\s]+/);
 		return match ? match[0] : null;
 	}),
-	fetchHtml: vi.fn().mockResolvedValue("<html><body>content</body></html>"),
+	fetchContent: vi.fn().mockResolvedValue({ content: "<html><body>content</body></html>", isMarkdown: false }),
 	parseArticle: vi.fn().mockReturnValue({ title: "Test Article", markdown: "# Test" }),
 	slugify: vi.fn((text: string) => text.toLowerCase().replace(/\s+/g, "-")),
 }));
