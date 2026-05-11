@@ -1,0 +1,16 @@
+{
+	"name": "telegram-md-bot",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-05-11",
+	"compatibility_flags": ["nodejs_compat"],
+	"account_id": "8d8c608321599874302fa9b6c6a633a7",
+	"observability": {
+		"enabled": true,
+	},
+	// Secrets (set via: npx wrangler secret put <NAME>)
+	// TELEGRAM_BOT_TOKEN
+	// ALLOWED_CHAT_ID
+	"vars": {
+		"PROXYFLARE_WORKERS": "[\"https://proxyflare-1771765050-ofdfhl.guides.workers.dev\",\"https://proxyflare-1771765050-dnfqud.guides.workers.dev\",\"https://proxyflare-1771765050-prjxuc.guides.workers.dev\"]",
+	},
+}
