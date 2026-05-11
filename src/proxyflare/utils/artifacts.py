@@ -9,8 +9,6 @@ __all__ = [
     "build_rust_worker",
 ]
 
-# Using standard print for build script logging compatibility.
-
 
 def build_rust_worker(verbose: bool = True) -> bool:
     """
@@ -20,12 +18,11 @@ def build_rust_worker(verbose: bool = True) -> bool:
     if verbose:
         from proxyflare.cli.console import console
 
+    if verbose:
         console.print("Building Rust worker...", style="dim")
 
     if not shutil.which("cargo"):
         if verbose:
-            from proxyflare.cli.console import console
-
             console.print("Cargo not found. Skipping Rust worker build.", style="yellow")
         return False
 
@@ -33,11 +30,7 @@ def build_rust_worker(verbose: bool = True) -> bool:
     script_path = package_root / "scripts" / "build_rust.py"
 
     if not script_path.exists():
-        # Fallback: maybe we are installed as a package and scripts are not here?
-        # In that case, we can't build.
         if verbose:
-            from proxyflare.cli.console import console
-
             console.print(f"Build script not found at {script_path}", style="yellow")
         return False
 
@@ -46,7 +39,5 @@ def build_rust_worker(verbose: bool = True) -> bool:
         return True
     except subprocess.CalledProcessError as e:
         if verbose:
-            from proxyflare.cli.console import console
-
             console.print(f"Failed to build Rust worker: {e}", style="red")
         return False

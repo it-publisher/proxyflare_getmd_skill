@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,12 +11,22 @@ from hatchling.builders.hooks.plugin.interface import (  # ty:ignore[unresolved-
 
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
-        print("Running CustomBuildHook to build Rust worker...")  # noqa: T201
-
-        # We are running during `hatch build`. We need to find `build_rust.py`.
-        # When building the wheel/sdist, __file__ might be in a temp dir,
-        # but usually hatch runs the hook from the project root.
         project_root = Path.cwd()
+
+        # Explicit opt-out
+        if os.environ.get("SKIP_RUST_BUILD"):
+            print("SKIP_RUST_BUILD set — skipping Rust worker build.")  # noqa: T201
+            return
+
+        # Pre-built artifacts are committed to the repo; no need to rebuild.
+        wasm_artifact = (
+            project_root / "src" / "proxyflare" / "workers" / "rust" / "build" / "index_bg.wasm"
+        )
+        if wasm_artifact.exists():
+            print("Pre-built Rust artifacts found — skipping Rust worker build.")  # noqa: T201
+            return
+
+        print("Running CustomBuildHook to build Rust worker...")  # noqa: T201
         script_path = project_root / "src" / "proxyflare" / "scripts" / "build_rust.py"
 
         if not script_path.exists():

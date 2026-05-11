@@ -7,12 +7,10 @@ import typer
 from proxyflare.cli.commands.config import config_app
 from proxyflare.cli.commands.create import create
 from proxyflare.cli.commands.delete import delete_worker
-
-# from proxyflare.cli.commands.doctor import doctor
 from proxyflare.cli.commands.list import list_workers
 from proxyflare.cli.commands.test import test_workers
 from proxyflare.cli.console import print_error
-from proxyflare.cli.exceptions import ProxyflareError
+from proxyflare.exceptions import ProxyflareError
 
 __all__ = ["app", "main"]
 

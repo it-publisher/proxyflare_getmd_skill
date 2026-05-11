@@ -9,7 +9,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from proxyflare.cli.console import console, err_console
 from proxyflare.cli.context import get_app_context
 from proxyflare.cli.exceptions import ConfigError, WorkerError
-from proxyflare.constants import DEFAULT_DEPLOY_CONCURRENCY, WorkerType
+from proxyflare.constants import DEFAULT_DEPLOY_CONCURRENCY, WORKER_TYPES, WorkerType
 from proxyflare.models.deployment import DeploymentConfig
 from proxyflare.models.worker_result import WorkerRecord, WorkerResultFile
 
@@ -98,7 +98,7 @@ async def _create_async(
         final_worker_type_str = worker_type or ctx.config.worker_type
 
         # Validate worker type
-        if final_worker_type_str not in ["python", "rust", "js"]:
+        if final_worker_type_str not in WORKER_TYPES:
             raise ConfigError(
                 f"Invalid worker type '{final_worker_type_str}'. Must be 'python', 'rust', or 'js'."
             )

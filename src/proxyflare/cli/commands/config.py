@@ -34,7 +34,7 @@ def verify() -> None:
             console.print(f"Wrangler/Npx found: [green]{wrangler_path}[/green]")
         else:
             console.print("Wrangler/Npx: [red]NOT FOUND[/red]")
-            console.print("[yelliw]Some features will not work without it.[/yellow]")
+            console.print("[yellow]Some features will not work without it.[/yellow]")
             console.print(
                 "[dim]  Hint: Install Node.js and Wrangler (npm install -g wrangler)[/dim]"
             )
