@@ -1,82 +1,184 @@
-# Proxyflare GetMD Skill
+# Proxyflare
 
-Мощный инструмент для преобразования веб-страниц в чистый Markdown. Идеально подходит для подготовки контента для LLM, создания персональных баз знаний или архивации статей.
+![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Coverage](https://img.shields.io/badge/coverage-83%25-brightgreen.svg)
 
-## Как это работает
+Инструментарий для работы с Cloudflare Workers как прокси-сетью. Два компонента:
 
-Скрипт использует кастомный транспорт для httpx, который распределяет запросы через сеть ваших Cloudflare Workers (Proxyflare). Это позволяет:
+- **Proxyflare CLI** — Python-утилита для деплоя и управления пулом прокси-воркеров
+- **telegram-md-bot** — Telegram-бот, который принимает URL статей и возвращает `.md`-файл
 
-1. Обходить блокировки (403 Forbidden, Cloudflare Turnstile и т.д.).
+---
 
-2. Извлекать только суть: библиотека trafilatura очищает страницу от рекламы, навигации и футеров.
+## Proxyflare CLI
 
-3. Сохранять структуру: на выходе получается чистый Markdown с поддержкой таблиц.
+### Что делает
 
-## Быстрый старт
+Разворачивает десятки прокси-воркеров на Cloudflare Workers одной командой. Каждый воркер принимает целевой URL и проксирует запрос — через query-параметр, заголовок или путь.
 
-1. Установка
+Поддерживаемые типы воркеров:
+
+| Тип | Latency (avg) | RPS |
+|-----|--------------|-----|
+| JavaScript | ~425 ms | ~43 |
+| Python (Pyodide) | ~410 ms | ~46 |
+| **Rust (WASM)** | **~240 ms** | **~73** |
+
+### Установка
+
+Требования: Python 3.12+, [uv](https://docs.astral.sh/uv/), Rust + cargo (для Rust-воркеров)
 
 ```bash
-# Клонируйте репозиторий
-git clone https://github.com/AntonKoshuba/proxyflare_getmd_skill.git
-cd proxyflare_getmd_skill
-
-# Установите зависимости
+git clone https://github.com/AntonKoshuba/proxyflare.git
+cd proxyflare
 uv sync
+uv tool install .
 ```
 
-2. Конфигурация
+### Конфигурация
 
-Для работы скрипта необходим файл `proxyflare-workers.json` в корневой директории. Если у вас уже развернуты воркеры через [Proxyflare](https://github.com/defernest/proxyflare), просто скопируйте конфиг:
+Создай `.env` в корне проекта (см. `.env.example`):
+
+```env
+PROXYFLARE_ACCOUNT_ID=your_cloudflare_account_id
+PROXYFLARE_API_TOKEN=your_cloudflare_api_token
+```
+
+#### Требования к API-токену
+
+В Cloudflare Dashboard → My Profile → API Tokens → Create Token (Custom):
+
+- **User → User Details → Read**
+- **User → Memberships → Read**
+- **Account → Workers Scripts → Edit**
+- **Account → Account Settings → Read**
+
+Оставь Account Resources и Zone Resources как **Include → All**.
+
+### Команды
 
 ```bash
-cp ~/путь/к/вашему/proxyflare-workers.json .
+# Проверить конфигурацию и права токена
+pf config verify
+
+# Задеплоить 5 воркеров (по умолчанию python)
+pf create --count 5
+
+# Задеплоить rust-воркеры
+pf create --count 3 --type rust
+
+# Список активных воркеров
+pf list
+
+# Удалить все воркеры
+pf delete --all
+
+# Протестировать пул
+pf test --url https://example.com
 ```
 
-Файл добавлен в `.gitignore` и не попадет в публичный доступ.
+Результаты деплоя сохраняются в `proxyflare-workers.json` (в `.gitignore`).
 
-3. Настройка Alias (опционально)
+### Клиентская библиотека
 
-Для удобного вызова из любой папки добавьте alias в ваш `.zshrc` или `.bashrc`:
+```python
+import httpx
+from proxyflare.client import ProxyflareWorkersManager, AsyncProxyflareTransport
+
+manager = ProxyflareWorkersManager.from_file("proxyflare-workers.json")
+transport = AsyncProxyflareTransport(manager)
+
+async with httpx.AsyncClient(transport=transport) as client:
+    response = await client.get("https://example.com")
+```
+
+---
+
+## telegram-md-bot
+
+### Что делает
+
+Telegram-бот на Cloudflare Workers. Пришли ему ссылку — получишь `.md`-файл с текстом статьи.
+
+Использует Readability для извлечения контента и node-html-markdown для конвертации.
+
+### Деплой
+
+Требования: Node.js 18+, аккаунт Cloudflare
 
 ```bash
-alias getmd='uv run /путь/к/проекту/web_to_md.py'
+cd telegram-md-bot
+npm install
 ```
 
-## Использование
+Создай бота через [@BotFather](https://t.me/BotFather), получи токен.
+Узнай свой chat ID через [@userinfobot](https://t.me/userinfobot).
 
-Вызывается через созданный alias:
+Настрой `wrangler.jsonc` — укажи свой `account_id`:
+
+```jsonc
+{
+  "account_id": "your_cloudflare_account_id",
+  ...
+}
+```
+
+Задеплой воркер:
 
 ```bash
-getmd <URL>
+CLOUDFLARE_API_TOKEN=your_token npx wrangler deploy
 ```
 
-Пример:
+Установи секреты:
 
 ```bash
-getmd https://
+CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put TELEGRAM_BOT_TOKEN
+CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put ALLOWED_CHAT_ID
 ```
 
-Расширенные параметры
-
-Скрипт поддерживает аргументы командной строки:
-
-- `-o`, `--output`: Путь к папке для сохранения (по умолчанию `./articles`).
-
-- `-p`, `--proxy-config`: Путь к JSON-конфигу воркеров (по умолчанию `./proxyflare-workers.json`).
-
-Пример:
+Зарегистрируй вебхук:
 
 ```bash
-getmd <URL> -o ~/Downloads/my_notes -p my_custom_config.json
+curl "https://api.telegram.org/botYOUR_TOKEN/setWebhook?url=https://telegram-md-bot.YOUR_SUBDOMAIN.workers.dev"
 ```
 
-## Особенности
+### Использование
 
-- **Smart Slugify**: Автоматическое создание имен файлов на основе заголовка статьи (с поддержкой кириллицы).
+Просто отправь боту ссылку:
 
-- **No Overwrite**: Если файл с таким именем уже существует, скрипт добавит временную метку, чтобы не затереть данные.
+```
+https://habr.com/ru/articles/123456/
+```
 
-- **User-Agent Rotation**: Имитация реального браузера для минимизации риска обнаружения.
+Бот ответит `.md`-файлом с текстом статьи.
 
-- **SRP Architecture**: Код разбит на независимые модули (Fetch, Extract, Save), что упрощает интеграцию в другие проекты.
+> Сайты за paywall (401) или с жёсткой защитой от ботов вернут ошибку.
+
+---
+
+## Структура репозитория
+
+```
+proxyflare/
+├── src/proxyflare/         # CLI и клиентская библиотека (Python)
+│   ├── cli/                # Команды: create, delete, list, test, config
+│   ├── client/             # httpx Transport + Workers Manager
+│   ├── services/           # WorkerService (Cloudflare API), Tester
+│   ├── workers/            # Исходники воркеров (py, js, rust)
+│   └── models/             # Pydantic-модели
+├── telegram-md-bot/        # Telegram-бот (TypeScript, Cloudflare Worker)
+│   └── src/
+│       ├── index.ts        # Обработчик вебхука
+│       ├── scraper.ts      # Фетч и парсинг статей
+│       └── telegram.ts     # Telegram Bot API
+├── tests/                  # Unit, integration, e2e тесты
+├── web_to_md.py            # Standalone-скрипт: URL → Markdown через CLI
+└── .env.example            # Шаблон конфигурации
+```
+
+---
+
+## Лицензия
+
+MIT

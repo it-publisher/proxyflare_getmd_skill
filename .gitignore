@@ -64,9 +64,10 @@ site/
 docs/
 .agent/
 .wrangler/
+.opencode/
 
 flareprox.py
 proxyflare-workers.json
-proxyflare-workers.json
 telegram-bot-sprint.md
 articles/
+news_digest_skill/
