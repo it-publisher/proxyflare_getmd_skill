@@ -117,7 +117,9 @@ export function parseArticle(html: string, url: string): ParsedArticle {
 		implementation: { createHTMLDocument: makePatchedDoc },
 	});
 
-	const reader = new Readability(document as unknown as Document);
+	const reader = new Readability(
+		document as unknown as ConstructorParameters<typeof Readability>[0]
+	);
 	const article = reader.parse();
 
 	if (!article) {
