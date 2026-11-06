@@ -30,6 +30,7 @@ REQUEST_TIMEOUT_SECONDS = 25.0
 # A file name is limited to 255 bytes. The margin leaves room for a suffix and the extension.
 MAX_SLUG_BYTES = 200
 FALLBACK_SLUG = "article"
+HEADING_SEARCH_LINES = 5
 
 # trafilatura sometimes takes one nested block for the whole article and silently drops the rest.
 # Below this share of the page's text the result is treated as such a mistake. A short article
@@ -160,8 +161,10 @@ def extract_article(html: str | bytes) -> Article | None:
 def format_document(article: Article, url: str) -> str:
     """Build the final Markdown: metadata, heading and text."""
     single_line_title = " ".join(article.title.split())
-    # The text often starts with the page's own H1, and a second heading would duplicate it
-    has_heading = article.content.lstrip().startswith("# ")
+    # The text often opens with the page's own H1, sometimes after a line or two of other text,
+    # and a second heading would duplicate it
+    opening_lines = article.content.lstrip().splitlines()[:HEADING_SEARCH_LINES]
+    has_heading = any(line.startswith("# ") for line in opening_lines)
     heading = "" if has_heading else f"# {single_line_title}\n\n"
     # A JSON string is a valid YAML string, so quotes and colons in the title are safe
     return (

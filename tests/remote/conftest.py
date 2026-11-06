@@ -1,3 +1,4 @@
+import asyncio
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -5,7 +6,6 @@ from collections.abc import AsyncGenerator
 import httpx
 import pytest
 from cloudflare import AsyncCloudflare
-from tenacity import retry, stop_after_delay, wait_exponential
 
 from proxyflare.constants import WORKER_KEY_BYTES
 from proxyflare.models.config import Config
@@ -13,14 +13,26 @@ from proxyflare.models.deployment import DeploymentConfig
 from proxyflare.models.worker_result import WorkerRecord
 from proxyflare.services.worker import WorkerService
 
+STABLE_RESPONSES_REQUIRED = 20
+WORKER_READY_TIMEOUT_SECONDS = 120
 
-@retry(stop=stop_after_delay(60), wait=wait_exponential(multiplier=1, min=4, max=10), reraise=True)
+
 async def wait_for_worker(url: str) -> None:
-    """Poll until the worker answers. Without a key it replies 401; 404 means not propagated yet."""
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-    if response.status_code != 401:
-        raise RuntimeError(f"Worker not ready: {response.status_code}")
+    """
+    Wait until the worker answers steadily. Without a key it replies 401.
+
+    For about 15 seconds after a deploy, Cloudflare locations answer differently, mixing 401 with
+    404 and 500. Each poll opens a new connection, because a reused one stays at one location.
+    """
+    deadline = time.monotonic() + WORKER_READY_TIMEOUT_SECONDS
+    stable_responses = 0
+    while stable_responses < STABLE_RESPONSES_REQUIRED:
+        if time.monotonic() > deadline:
+            raise RuntimeError(f"Worker didn't become ready in {WORKER_READY_TIMEOUT_SECONDS}s")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+        stable_responses = stable_responses + 1 if response.status_code == 401 else 0
+        await asyncio.sleep(1)
 
 
 @pytest.fixture(autouse=True)

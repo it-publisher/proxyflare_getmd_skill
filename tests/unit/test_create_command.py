@@ -65,6 +65,7 @@ def test_create_single_worker(mock_ctx):
 
     assert result.exit_code == 0
     assert "Successfully created 1 workers" in result.stdout
+    assert "reach all Cloudflare locations" in " ".join(result.stdout.split())
 
     # Verify JSON result
     data = json.loads(result_path.read_text())
