@@ -1,4 +1,4 @@
-__all__ = ["ProxyflareError", "SubdomainMissingError"]
+__all__ = ["FetchError", "ProxyflareError", "SubdomainMissingError"]
 
 
 class ProxyflareError(Exception):
@@ -8,6 +8,10 @@ class ProxyflareError(Exception):
         super().__init__(message)
         self.message = message
         self.exit_code = exit_code
+
+
+class FetchError(ProxyflareError):
+    """Raised when a page could not be downloaded through the workers."""
 
 
 class SubdomainMissingError(ProxyflareError):

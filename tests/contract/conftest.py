@@ -23,6 +23,12 @@ WRANGLER_PACKAGE = "wrangler@4.90.0"
 WORKER_START_TIMEOUT_SECONDS = 90
 TEST_KEY = "contract-test-key"
 BINARY_BODY = bytes(range(256))
+ARTICLE_TEXT = "Съешь же ещё этих мягких французских булок, да выпей чаю. " * 12
+ARTICLE_HTML = (
+    "<html><head><title>Заголовок статьи</title></head><body><article>"
+    f"<h1>Заголовок статьи</h1><p>{ARTICLE_TEXT}</p><p>{ARTICLE_TEXT}</p>"
+    "</article></body></html>"
+)
 
 WORKERS_DIR = Path(__file__).parents[2] / "src" / "proxyflare" / "workers"
 WORKER_ENTRY_POINTS = {
@@ -77,6 +83,11 @@ class UpstreamHandler(BaseHTTPRequestHandler):
             self.send(200, headers=(("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")))
         elif route == "/gzip":
             self.send(200, gzip.compress(b"compressed text"), (("Content-Encoding", "gzip"),))
+        elif route == "/article":
+            content_type = (("Content-Type", "text/html; charset=utf-8"),)
+            self.send(200, ARTICLE_HTML.encode(), content_type)
+        elif route == "/article-1251":
+            self.send(200, ARTICLE_HTML.encode("cp1251"), (("Content-Type", "text/html"),))
         elif route == "/binary":
             self.send(200, BINARY_BODY, (("Content-Type", "application/octet-stream"),))
         else:

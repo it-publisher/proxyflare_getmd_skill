@@ -968,6 +968,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "rich" },
     { name = "tenacity" },
+    { name = "trafilatura" },
     { name = "typer" },
 ]
 
@@ -983,7 +984,6 @@ dev = [
     { name = "respx" },
     { name = "ruff" },
     { name = "safety" },
-    { name = "trafilatura" },
 ]
 
 [package.metadata]
@@ -1005,7 +1005,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
     { name = "safety", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "tenacity", specifier = ">=8.2.0" },
-    { name = "trafilatura", marker = "extra == 'dev'", specifier = ">=2.0" },
+    { name = "trafilatura", specifier = ">=2.0" },
     { name = "typer", specifier = ">=0.12.0" },
 ]
 provides-extras = ["dev"]
