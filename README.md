@@ -135,12 +135,18 @@ CLOUDFLARE_API_TOKEN=your_token npx wrangler deploy
 ```bash
 CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put TELEGRAM_BOT_TOKEN
 CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put ALLOWED_CHAT_ID
+CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put WEBHOOK_SECRET
 ```
 
-Зарегистрируй вебхук:
+`WEBHOOK_SECRET` — случайная строка из символов `A-Z`, `a-z`, `0-9`, `_` и `-`, например результат `openssl rand -hex 32`. Без неё воркер отвечает 401 на все обновления.
+
+Зарегистрируй вебхук с тем же секретом:
 
 ```bash
-curl "https://api.telegram.org/botYOUR_TOKEN/setWebhook?url=https://telegram-md-bot.YOUR_SUBDOMAIN.workers.dev"
+TELEGRAM_BOT_TOKEN=your_bot_token \
+WORKER_URL=https://telegram-md-bot.YOUR_SUBDOMAIN.workers.dev \
+WEBHOOK_SECRET=your_secret \
+npx tsx scripts/set-webhook.ts
 ```
 
 ### Использование
