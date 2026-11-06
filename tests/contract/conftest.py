@@ -39,6 +39,9 @@ class Upstream:
 
 class UpstreamHandler(BaseHTTPRequestHandler):
     server_version = "upstream"
+    # HTTP/1.0 closes the connection after each response. Following a redirect, workerd could then
+    # pick the closing connection and fail with "Network connection lost", which real sites avoid.
+    protocol_version = "HTTP/1.1"
 
     def log_message(self, format: str, *args: object) -> None:
         """Keep test output clean."""

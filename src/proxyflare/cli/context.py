@@ -9,6 +9,7 @@ from cloudflare import AsyncCloudflare
 
 from proxyflare.cli.console import err_console as _err_console
 from proxyflare.models.config import Config
+from proxyflare.paths import get_env_file
 from proxyflare.services.worker import WorkerService
 
 __all__ = ["AppContext", "get_app_context"]
@@ -31,12 +32,12 @@ async def get_app_context() -> AsyncGenerator[AppContext]:
     Raises typer.Exit(1) on configuration errors.
     """
     try:
-        config = Config()  # type: ignore[call-arg]
+        config = Config.load()
     except Exception as e:
         _err_console.print(f"[bold red]Configuration error:[/bold red] {e}")
         _err_console.print(
             "[dim]Hint: Ensure PROXYFLARE_ACCOUNT_ID and PROXYFLARE_API_TOKEN "
-            "are set in your environment or .env file.[/dim]"
+            f"are set in your environment or in {get_env_file()}.[/dim]"
         )
         raise typer.Exit(1) from e
 

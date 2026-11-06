@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from proxyflare.cli.app import app
 from proxyflare.cli.exceptions import ConfigError, WorkerError
+from proxyflare.exceptions import SubdomainMissingError
 
 runner = CliRunner()
 
@@ -156,10 +157,89 @@ def test_create_partial_deploy_failure(mock_ctx):
 
     result = runner.invoke(app, ["create", "--count", "2", "--result", str(result_path)])
 
-    assert result.exit_code == 0  # Partial success
+    assert result.exit_code == 1
+    assert "1 of 2 workers failed" in str(result.exception)
     data = json.loads(result_path.read_text())
     assert len(data) == 1
     assert data[0]["name"] == "proxyflare-1-ok"
+
+
+def test_create_all_deploys_failed(mock_ctx):
+    ctx, tmp_path = mock_ctx
+    result_path = tmp_path / "result.json"
+
+    ctx.service.get_worker_source.return_value = ("source", None)
+    ctx.service.generate_worker_name.return_value = "proxyflare-1-fail"
+    ctx.service.deploy_worker.side_effect = RuntimeError("Deploy failed")
+
+    result = runner.invoke(app, ["create", "--result", str(result_path)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, WorkerError)
+    assert not result_path.exists()
+
+
+def test_create_keeps_workers_from_earlier_runs(mock_ctx):
+    ctx, tmp_path = mock_ctx
+    result_path = tmp_path / "result.json"
+
+    ctx.service.get_worker_source.return_value = ("source", None)
+    ctx.service.generate_worker_name.side_effect = ["proxyflare-1-aaa", "proxyflare-2-bbb"]
+    ctx.service.deploy_worker.side_effect = ["https://a.dev", "https://b.dev"]
+
+    assert runner.invoke(app, ["create", "--result", str(result_path)]).exit_code == 0
+    assert runner.invoke(app, ["create", "--result", str(result_path)]).exit_code == 0
+
+    data = json.loads(result_path.read_text())
+    assert [worker["name"] for worker in data] == ["proxyflare-1-aaa", "proxyflare-2-bbb"]
+    assert data[0]["key"] != data[1]["key"]
+
+
+def test_create_refuses_to_deploy_when_workers_file_is_invalid(mock_ctx):
+    """New workers would be left unrecorded, and the old file's contents lost."""
+    ctx, tmp_path = mock_ctx
+    result_path = tmp_path / "result.json"
+    result_path.write_text('[{"name": "old-worker", "key": "old-secret"}]')
+
+    result = runner.invoke(app, ["create", "--result", str(result_path)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, ConfigError)
+    assert "old-secret" not in str(result.exception)
+    ctx.service.deploy_worker.assert_not_called()
+    assert "old-worker" in result_path.read_text()
+
+
+def test_create_saves_to_config_dir_by_default(mock_ctx, isolated_config_dir):
+    ctx, _ = mock_ctx
+
+    ctx.service.get_worker_source.return_value = ("source", None)
+    ctx.service.generate_worker_name.return_value = "proxyflare-1-aaa"
+    ctx.service.deploy_worker.return_value = "https://a.dev"
+
+    assert runner.invoke(app, ["create"]).exit_code == 0
+
+    workers_file = isolated_config_dir / "workers.json"
+    assert json.loads(workers_file.read_text())[0]["name"] == "proxyflare-1-aaa"
+    assert workers_file.stat().st_mode & 0o777 == 0o600
+    assert isolated_config_dir.stat().st_mode & 0o777 == 0o700
+
+
+def test_create_rejects_zero_count(mock_ctx):
+    ctx, _ = mock_ctx
+    assert runner.invoke(app, ["create", "--count", "0"]).exit_code == 2
+    ctx.service.deploy_worker.assert_not_called()
+
+
+def test_create_reports_missing_subdomain_with_its_own_message(mock_ctx):
+    ctx, tmp_path = mock_ctx
+    ctx.service.get_worker_source.return_value = ("source", None)
+    ctx.service.ensure_subdomain.side_effect = SubdomainMissingError("Set up a subdomain")
+
+    result = runner.invoke(app, ["create", "--result", str(tmp_path / "result.json")])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SubdomainMissingError)
 
 
 def test_create_with_explicit_type(mock_ctx):

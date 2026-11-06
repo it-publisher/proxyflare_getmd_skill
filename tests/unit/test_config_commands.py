@@ -105,9 +105,10 @@ def test_show_command():
     with patch("proxyflare.cli.commands.config.Config") as MockConfig:
         mock_config_instance = MagicMock()
         mock_config_instance.__str__.return_value = "Mock Config"
-        MockConfig.return_value = mock_config_instance
+        MockConfig.load.return_value = mock_config_instance
 
         result = runner.invoke(config_app, ["show"])
 
         assert result.exit_code == 0
         assert "Mock Config" in result.stdout
+        assert "Workers file:" in result.stdout

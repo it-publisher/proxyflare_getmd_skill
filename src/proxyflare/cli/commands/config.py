@@ -11,6 +11,7 @@ from proxyflare.cli.exceptions import ConfigError
 from proxyflare.cli.utils import handle_validation_error
 from proxyflare.exceptions import SubdomainMissingError
 from proxyflare.models.config import Config
+from proxyflare.paths import get_env_file, get_workers_file
 
 config_app = typer.Typer(
     no_args_is_help=True, help="Manage Proxyflare configuration (show, verify)."
@@ -109,8 +110,10 @@ def verify() -> None:
 def show() -> None:
     """Display the current Proxyflare configuration."""
     try:
-        config = Config()  # type: ignore[call-arg]
+        config = Config.load()
         console.print(config)
+        console.print(f"Config file: {get_env_file()}")
+        console.print(f"Workers file: {get_workers_file()}")
     except ValidationError as e:
         handle_validation_error(e)
         raise ConfigError("Configuration validation failed.") from e

@@ -39,12 +39,14 @@ uv tool install .
 
 ### Конфигурация
 
-Создай `.env` в корне проекта (см. `.env.example`):
+Создай `~/.config/proxyflare/.env` (шаблон: `.env.example`):
 
 ```env
 PROXYFLARE_ACCOUNT_ID=your_cloudflare_account_id
 PROXYFLARE_API_TOKEN=your_cloudflare_api_token
 ```
+
+Команды работают из любой папки. Переменные окружения важнее файла, а `PROXYFLARE_CONFIG_DIR` меняет папку конфигурации. `.env` в текущей папке не читается.
 
 #### Требования к API-токену
 
@@ -79,15 +81,16 @@ pf delete --all
 pf test --url https://example.com
 ```
 
-Результаты деплоя сохраняются в `proxyflare-workers.json` (в `.gitignore`, права `600`). В файле лежат ключи воркеров: без `X-Proxyflare-Key` воркер отвечает 401. Поведение воркеров описано в [контракте](docs/worker-contract.md).
+Воркеры записываются в `~/.config/proxyflare/workers.json` с правами `600`: `pf create` дополняет файл, `pf delete` убирает из него удалённые. В файле лежат ключи воркеров: без `X-Proxyflare-Key` воркер отвечает 401. Поведение воркеров описано в [контракте](docs/worker-contract.md).
 
 ### Клиентская библиотека
 
 ```python
 import httpx
 from proxyflare.client import ProxyflareWorkersManager, AsyncProxyflareTransport
+from proxyflare.paths import get_workers_file
 
-manager = ProxyflareWorkersManager.from_file("proxyflare-workers.json")
+manager = ProxyflareWorkersManager(get_workers_file())
 transport = AsyncProxyflareTransport(manager)
 
 async with httpx.AsyncClient(transport=transport) as client:

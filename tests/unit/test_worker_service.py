@@ -1,11 +1,18 @@
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
-from tenacity import RetryError
+from cloudflare import AuthenticationError, NotFoundError
+from tenacity import wait_none
 
 from proxyflare.exceptions import SubdomainMissingError
 from proxyflare.models.deployment import DeploymentConfig
 from proxyflare.services.worker import WorkerService
+
+
+def make_api_error(error_class, status):
+    response = httpx.Response(status, request=httpx.Request("GET", "https://api.test"))
+    return error_class("API error", response=response, body=None)
 
 
 @pytest.fixture
@@ -36,13 +43,21 @@ async def test_ensure_subdomain_success(service, mock_client):
 
 async def test_ensure_subdomain_not_configured(service, mock_client):
     """Should raise SubdomainMissingError instead of auto-provisioning."""
-    mock_client.workers.subdomains.get.side_effect = Exception("Not found")
+    mock_client.workers.subdomains.get.side_effect = make_api_error(NotFoundError, 404)
 
     with pytest.raises(SubdomainMissingError, match="subdomain is not configured"):
         await service.ensure_subdomain()
 
     # Must NOT attempt to create/update a subdomain
     mock_client.workers.subdomains.update.assert_not_called()
+
+
+async def test_ensure_subdomain_does_not_hide_other_api_errors(service, mock_client):
+    """A rejected token must not be reported as a missing subdomain."""
+    mock_client.workers.subdomains.get.side_effect = make_api_error(AuthenticationError, 401)
+
+    with pytest.raises(AuthenticationError):
+        await service.ensure_subdomain()
 
 
 async def test_ensure_subdomain_empty_result(service, mock_client):
@@ -98,7 +113,8 @@ async def test_deploy_worker_rust(service, mock_client):
     )
 
 
-async def test_deploy_worker_failure(service, mock_client):
+async def test_deploy_worker_failure(service, mock_client, monkeypatch):
+    monkeypatch.setattr(WorkerService.deploy_worker.retry, "wait", wait_none())
     service.ensure_subdomain = AsyncMock(return_value="test-sub")
     mock_client.workers.scripts.update.side_effect = Exception("Deploy Error")
 
@@ -108,8 +124,9 @@ async def test_deploy_worker_failure(service, mock_client):
         worker_type="js",
         key="test-key",
     )
-    with pytest.raises(RetryError):
+    with pytest.raises(RuntimeError, match="Deployment failed: Deploy Error"):
         await service.deploy_worker(config)
+    assert mock_client.workers.scripts.update.call_count == 3
 
 
 # --- list_workers ---
@@ -194,6 +211,11 @@ async def test_delete_worker_rejects_foreign_custom_prefix(mock_client):
     svc = WorkerService(mock_client, "test-account", "myapp")
     with pytest.raises(ValueError, match="does not belong"):
         await svc.delete_worker("proxyflare-old-worker")
+
+
+async def test_delete_worker_already_gone(service, mock_client):
+    mock_client.workers.scripts.delete.side_effect = make_api_error(NotFoundError, 404)
+    await service.delete_worker("proxyflare-test")
 
 
 async def test_delete_worker_failure(service, mock_client):
