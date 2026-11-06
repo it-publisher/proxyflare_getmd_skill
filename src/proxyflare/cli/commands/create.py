@@ -13,6 +13,7 @@ from proxyflare.cli.exceptions import ConfigError, WorkerError
 from proxyflare.constants import (
     DEFAULT_DEPLOY_CONCURRENCY,
     WORKER_KEY_BYTES,
+    WORKER_PROPAGATION_SECONDS,
     WORKER_TYPES,
     WorkerType,
 )
@@ -171,6 +172,10 @@ async def _create_async(
             f"\n[bold green]Successfully created {len(results_data)} workers![/bold green]"
         )
         console.print(f"Results saved to: [bold]{result}[/bold]")
+        console.print(
+            "[dim]New workers can answer with errors for about "
+            f"{WORKER_PROPAGATION_SECONDS} seconds while they reach all Cloudflare locations.[/dim]"
+        )
 
         failed_count = count - len(results_data)
         if failed_count:

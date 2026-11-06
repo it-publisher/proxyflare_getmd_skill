@@ -11,6 +11,7 @@ __all__ = [
     "WORKER_KEY_BYTES",
     "WORKER_KEY_HEADER",
     "WORKER_META",
+    "WORKER_PROPAGATION_SECONDS",
     "WORKER_TYPES",
     "WorkerMeta",
     "WorkerType",
@@ -33,6 +34,8 @@ WORKER_ERROR_HEADER = "X-Proxyflare-Error"
 
 # Defaults
 DEFAULT_DEPLOY_CONCURRENCY = 5
+# Measured: locations mixed 404 and 500 with normal answers for up to about 15 seconds
+WORKER_PROPAGATION_SECONDS = 30
 
 
 @dataclass(frozen=True)

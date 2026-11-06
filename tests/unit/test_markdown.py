@@ -225,6 +225,23 @@ class TestFormatDocument:
         assert 'title: "Статья — Сайт"\n' in document
         assert document.endswith("---\n\n# Статья\n\nТекст\n")
 
+    def test_does_not_duplicate_heading_after_a_line_of_text(self):
+        """Seen on a real page: the title as plain text, then the same title as a heading."""
+        content = "PEP 8\n\n# PEP 8\n\nТекст"
+
+        document = markdown.format_document(
+            Article("PEP 8 | peps.python.org", content), "https://t"
+        )
+
+        assert document.count("# PEP 8") == 1
+
+    def test_adds_heading_when_the_first_one_is_far_into_the_text(self):
+        content = "\n".join(f"строка {i}" for i in range(10)) + "\n# Раздел"
+
+        document = markdown.format_document(Article("Заголовок", content), "https://t")
+
+        assert "# Заголовок\n" in document
+
     def test_escapes_special_characters_in_title(self):
         document = markdown.format_document(
             Article('Он сказал: "да"\nи ушёл', "x"), "https://site.test"
