@@ -989,7 +989,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.0" },
-    { name = "cloudflare", specifier = ">=4.3.1" },
+    { name = "cloudflare", specifier = ">=4.3.1,<5" },
     { name = "hatchling", marker = "extra == 'dev'" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "loguru", specifier = ">=0.7.0" },
