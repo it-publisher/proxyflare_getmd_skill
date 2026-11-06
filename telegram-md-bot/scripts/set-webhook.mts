@@ -1,4 +1,4 @@
-// Usage: TELEGRAM_BOT_TOKEN=<token> WORKER_URL=<url> WEBHOOK_SECRET=<secret> npx tsx scripts/set-webhook.ts
+// Usage: TELEGRAM_BOT_TOKEN=<token> WORKER_URL=<url> WEBHOOK_SECRET=<secret> npx tsx scripts/set-webhook.mts
 // WEBHOOK_SECRET must match the worker secret of the same name.
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const workerUrl = process.env.WORKER_URL;

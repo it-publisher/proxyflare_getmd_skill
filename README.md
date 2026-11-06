@@ -146,7 +146,7 @@ CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put WEBHOOK_SECRET
 TELEGRAM_BOT_TOKEN=your_bot_token \
 WORKER_URL=https://telegram-md-bot.YOUR_SUBDOMAIN.workers.dev \
 WEBHOOK_SECRET=your_secret \
-npx tsx scripts/set-webhook.ts
+npx tsx scripts/set-webhook.mts
 ```
 
 ### Использование
