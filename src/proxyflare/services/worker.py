@@ -21,6 +21,12 @@ from proxyflare.models.deployment import DeploymentConfig
 
 __all__ = ["WorkerService"]
 
+RUST_BUILD_HINT = (
+    "Install rustup (https://rustup.rs), run `rustup target add wasm32-unknown-unknown`, "
+    "then reinstall from the repository root: `uv tool install --force .`\n"
+    "Or use a worker that needs no build: `--type js`."
+)
+
 
 class WorkerService:
     """Service for managing Cloudflare Workers deployments."""
@@ -142,8 +148,8 @@ class WorkerService:
             await self.client.workers.scripts.update(
                 account_id=self.account_id,
                 script_name=config.name,
-                metadata=metadata,  # type: ignore[arg-type]
-                files=files,  # type: ignore[arg-type]
+                metadata=metadata,  # ty: ignore[invalid-argument-type]
+                files=files,  # ty: ignore[invalid-argument-type]
             )
 
             await self.client.workers.scripts.subdomain.create(
@@ -268,15 +274,18 @@ class WorkerService:
         script_bytes, wasm_bytes = self._get_resource_source(worker_type, meta)
 
         if script_bytes is None:
+            hint = (
+                RUST_BUILD_HINT
+                if worker_type == "rust"
+                else "Please assure the package was correctly built and installed."
+            )
             raise FileNotFoundError(
-                f"Worker source for '{worker_type}' not found in package resources.\n"
-                "Please assure the package was correctly built and installed."
+                f"Worker source for '{worker_type}' not found in package resources.\n{hint}"
             )
 
         if worker_type == "rust" and wasm_bytes is None:
             raise FileNotFoundError(
-                "Rust worker WASM artifact not found in package resources.\n"
-                "Please assure the package was correctly built and installed."
+                f"Rust worker WASM artifact not found in package resources.\n{RUST_BUILD_HINT}"
             )
 
         return script_bytes.decode("utf-8"), wasm_bytes

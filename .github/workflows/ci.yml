@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    env:
+      # The rust-worker job covers the build, so this one needs no toolchain
+      SKIP_RUST_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uvx ty@0.0.99 check src/
+      - run: uv run pytest
+
+  rust-worker:
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_RUST_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo test --locked
+        working-directory: src/proxyflare/workers/rust
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv build --wheel
+      - name: Check that the wheel contains the Rust worker
+        run: |
+          contents="$(python3 -m zipfile -l dist/*.whl)"
+          grep -q 'workers/rust/build/index.js' <<< "$contents"
+          grep -q 'workers/rust/build/index_bg.wasm' <<< "$contents"
+
+  telegram-bot:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: telegram-md-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: telegram-md-bot/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx tsc --noEmit -p test/tsconfig.json
+      - run: npx vitest run
+      - run: npm audit --omit=dev

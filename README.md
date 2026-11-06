@@ -27,7 +27,9 @@
 
 ### Установка
 
-Требования: Python 3.12+, [uv](https://docs.astral.sh/uv/), Rust + cargo (для Rust-воркеров)
+Требования: Python 3.12+, [uv](https://docs.astral.sh/uv/).
+
+Rust нужен только для Rust-воркеров: [rustup](https://rustup.rs) и `rustup target add wasm32-unknown-unknown`. Без него установка тоже пройдёт, но `pf create --type rust` работать не будет.
 
 ```bash
 git clone https://github.com/AntonKoshuba/proxyflare.git
