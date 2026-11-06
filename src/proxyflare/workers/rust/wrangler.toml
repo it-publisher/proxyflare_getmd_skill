@@ -1,6 +1,6 @@
 name = "proxyflare-rust"
 main = "build/worker/shim.mjs"
-compatibility_date = "2024-02-14"
+compatibility_date = "2025-05-11"
 
 [build]
 command = "cargo install -q --locked --version 0.8.1 worker-build && worker-build --release"
