@@ -8,6 +8,7 @@ from proxyflare.cli.commands.config import config_app
 from proxyflare.cli.commands.create import create
 from proxyflare.cli.commands.delete import delete_worker
 from proxyflare.cli.commands.list import list_workers
+from proxyflare.cli.commands.md import md
 from proxyflare.cli.commands.test import test_workers
 from proxyflare.cli.console import print_error
 from proxyflare.exceptions import ProxyflareError
@@ -42,6 +43,7 @@ app.command(name="create")(create)
 app.command(name="list")(list_workers)
 app.command(name="delete")(delete_worker)
 app.command(name="test")(test_workers)
+app.command(name="md")(md)
 
 
 def main() -> None:

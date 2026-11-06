@@ -4,10 +4,13 @@ import re
 
 import httpx
 import pytest
+from typer.testing import CliRunner
 
+from proxyflare.cli.app import app
 from proxyflare.client import ProxyflareTransport, ProxyflareWorkersManager
 from proxyflare.constants import WORKER_KEY_HEADER
-from proxyflare.models.worker_result import WorkerRecord
+from proxyflare.exceptions import FetchError
+from proxyflare.models.worker_result import WorkerRecord, WorkerResultFile
 from tests.contract.conftest import BINARY_BODY, TEST_KEY
 
 pytestmark = pytest.mark.contract
@@ -224,3 +227,48 @@ def test_client_library_works_through_the_worker(worker_url, upstream):
     assert echo["path"] == "/echo?a=1&b=two%20words"
     assert echo["body"] == "payload"
     assert WORKER_KEY_HEADER.lower() not in echo["headers"]
+
+
+# --- pf md ---
+
+
+def run_pf_md(worker_url, url, tmp_path, key=TEST_KEY):
+    worker = WorkerRecord(name="w", url=worker_url, type="js", created_at=1.0, key=key)
+    workers_file = tmp_path / "workers.json"
+    WorkerResultFile(root=[worker]).save(workers_file)
+    args = ["md", url, "--workers-file", str(workers_file), "--output", str(tmp_path / "out")]
+    return CliRunner().invoke(app, args)
+
+
+@pytest.mark.parametrize("route", ["/article", "/article-1251"])
+def test_pf_md_saves_article(worker_url, upstream, tmp_path, route):
+    url = f"{upstream.url}{route}?a=1"
+
+    result = run_pf_md(worker_url, url, tmp_path)
+
+    assert result.exit_code == 0, result.output
+    saved = tmp_path / "out" / "заголовок-статьи.md"
+    assert result.stdout.strip() == str(saved)
+    text = saved.read_text(encoding="utf-8")
+    assert f'source: "{url}"' in text
+    assert "Съешь же ещё" in text
+    assert upstream.requests[-1]["path"] == f"{route}?a=1"
+    assert "Mozilla" in upstream.requests[-1]["headers"]["user-agent"]
+
+
+def test_pf_md_reports_site_error_without_retrying(worker_url, upstream, tmp_path):
+    result = run_pf_md(worker_url, f"{upstream.url}/status/404", tmp_path)
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, FetchError)
+    assert "HTTP 404" in str(result.exception)
+    assert len(upstream.requests) == 1
+
+
+def test_pf_md_treats_rejected_key_as_worker_failure(worker_url, upstream, tmp_path):
+    """A 401 from the worker must not be reported as if the site had refused."""
+    result = run_pf_md(worker_url, f"{upstream.url}/article", tmp_path, key="wrong-key")
+
+    assert result.exit_code == 1
+    assert "all 1 attempts failed" in str(result.exception)
+    assert upstream.requests == []
