@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -9,7 +10,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from proxyflare.cli.console import console, err_console
 from proxyflare.cli.context import get_app_context
 from proxyflare.cli.exceptions import ConfigError, WorkerError
-from proxyflare.constants import DEFAULT_DEPLOY_CONCURRENCY, WORKER_TYPES, WorkerType
+from proxyflare.constants import (
+    DEFAULT_DEPLOY_CONCURRENCY,
+    WORKER_KEY_BYTES,
+    WORKER_TYPES,
+    WorkerType,
+)
 from proxyflare.models.deployment import DeploymentConfig
 from proxyflare.models.worker_result import WorkerRecord, WorkerResultFile
 
@@ -34,7 +40,7 @@ async def _deploy_workers_parallel(
     Args:
         ctx: Application context containing the Cloudflare service.
         script_content: Source code of the worker.
-        worker_type: Type of worker (python/rust/js).
+        worker_type: Type of worker (rust/js).
         wasm_content: Optional WASM binary.
         count: Number of workers to deploy.
         progress: Rich progress bar instance.
@@ -47,12 +53,14 @@ async def _deploy_workers_parallel(
 
     async def _deploy_one() -> WorkerRecord | None:
         name = ctx.service.generate_worker_name()
+        key = secrets.token_urlsafe(WORKER_KEY_BYTES)
         async with sem:
             try:
                 config = DeploymentConfig(
                     name=name,
                     script_content=script_content,
                     worker_type=worker_type,
+                    key=key,
                     wasm_content=wasm_content,
                 )
                 url = await ctx.service.deploy_worker(config)
@@ -62,6 +70,7 @@ async def _deploy_workers_parallel(
                     url=url,
                     type=worker_type,
                     created_at=time.time(),
+                    key=key,
                 )
             except Exception as e:
                 # Log error but don't fail everything
@@ -100,7 +109,7 @@ async def _create_async(
         # Validate worker type
         if final_worker_type_str not in WORKER_TYPES:
             raise ConfigError(
-                f"Invalid worker type '{final_worker_type_str}'. Must be 'python', 'rust', or 'js'."
+                f"Invalid worker type '{final_worker_type_str}'. Must be 'js' or 'rust'."
             )
 
         final_worker_type: WorkerType = final_worker_type_str
@@ -151,8 +160,7 @@ async def _create_async(
 
         # Save Results
         if results_data:
-            result_file = WorkerResultFile(root=results_data)
-            result.write_text(result_file.model_dump_json(indent=2))
+            WorkerResultFile(root=results_data).save(result)
 
             console.print(
                 f"\n[bold green]Successfully created {len(results_data)} workers![/bold green]"
@@ -166,7 +174,7 @@ def create(
     count: Annotated[int, typer.Option(help="Number of workers to create")] = 1,
     worker_type: Annotated[
         str | None,
-        typer.Option("--type", help="Type of worker (python/rust/js). Defaults to config."),
+        typer.Option("--type", help="Type of worker (js/rust). Defaults to config."),
     ] = None,
     result: Annotated[Path, typer.Option(help="Path to save result JSON")] = Path(
         "proxyflare-workers.json"

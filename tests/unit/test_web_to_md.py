@@ -28,6 +28,7 @@ def proxy_config(tmp_path):
             "url": f"https://worker-{index}.example.workers.dev",
             "type": "rust",
             "created_at": 1.0,
+            "key": "test-key",
         }
         for index in range(3)
     ]
@@ -94,7 +95,7 @@ class TestFetchHtml:
         calls = scripted_requests(*[httpx.ConnectError("down") for _ in range(3)])
 
         assert web_to_md.fetch_html("https://site.test", proxy_config) is None
-        assert len(set(calls)) == 3
+        assert len({worker.url for worker in calls}) == 3
         assert "все попытки исчерпаны" in capsys.readouterr().err
 
     def test_does_not_expose_worker_url_in_errors(self, proxy_config, scripted_requests, capsys):

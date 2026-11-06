@@ -3,10 +3,22 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from proxyflare.constants import WORKER_KEY_HEADER
+
 if TYPE_CHECKING:
     from .manager import ProxyflareWorkersManager
 
 __all__ = ["AsyncProxyflareTransport", "ProxyflareTransport"]
+
+
+def route_through_worker(request: httpx.Request, manager: "ProxyflareWorkersManager") -> None:
+    """Rewrite the request in place, so it goes to a worker with the original URL as its target."""
+    worker = manager.get_worker()
+    proxied_url = httpx.URL(worker.url).copy_with(params={"url": str(request.url)})
+
+    request.url = proxied_url
+    request.headers["Host"] = proxied_url.netloc.decode()
+    request.headers[WORKER_KEY_HEADER] = worker.key
 
 
 class ProxyflareTransport(httpx.BaseTransport):
@@ -42,22 +54,7 @@ class ProxyflareTransport(httpx.BaseTransport):
         )
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
-        # 1. Get a worker
-        worker_url = self.manager.get_worker()
-
-        # 2. Rewrite URL
-        # The worker expects target URL as 'url' query param.
-        target_url = str(request.url)
-
-        # Parse worker URL to get scheme/host
-        parsed_worker = httpx.URL(worker_url)
-
-        # New request points to worker
-        proxied_url = parsed_worker.copy_with(params={"url": target_url})
-
-        request.url = proxied_url
-        request.headers["Host"] = proxied_url.host
-
+        route_through_worker(request, self.manager)
         return self._pool.handle_request(request)
 
     def close(self) -> None:
@@ -108,15 +105,7 @@ class AsyncProxyflareTransport(httpx.AsyncBaseTransport):
         )
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        worker_url = self.manager.get_worker()
-        target_url = str(request.url)
-        parsed_worker = httpx.URL(worker_url)
-
-        proxied_url = parsed_worker.copy_with(params={"url": target_url})
-
-        request.url = proxied_url
-        request.headers["Host"] = proxied_url.host
-
+        route_through_worker(request, self.manager)
         return await self._pool.handle_async_request(request)
 
     async def aclose(self) -> None:

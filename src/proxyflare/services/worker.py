@@ -11,11 +11,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from proxyflare.constants import (
     COMPATIBILITY_DATE,
     CONTENT_TYPES,
+    WORKER_KEY_BINDING,
     WORKER_META,
     WorkerMeta,
     WorkerType,
 )
-from proxyflare.cors import CORS_HEADERS
 from proxyflare.exceptions import SubdomainMissingError
 from proxyflare.models.deployment import DeploymentConfig
 
@@ -99,31 +99,12 @@ class WorkerService:
         """
         meta = WORKER_META[config.worker_type]
 
-        # Prepare Bindings (CORS)
-        # We transform headers into environment variables for the worker
-        bindings = [
-            {
-                "type": "plain_text",
-                "name": "CORS_ORIGIN",
-                "text": CORS_HEADERS["Access-Control-Allow-Origin"],
-            },
-            {
-                "type": "plain_text",
-                "name": "CORS_METHODS",
-                "text": CORS_HEADERS["Access-Control-Allow-Methods"],
-            },
-            {
-                "type": "plain_text",
-                "name": "CORS_ALLOWED_HEADERS",
-                "text": CORS_HEADERS["Access-Control-Allow-Headers"],
-            },
-        ]
-
         metadata: dict[str, Any] = {
             "main_module": meta.main_module,
-            "bindings": bindings,
+            "bindings": [
+                {"type": "secret_text", "name": WORKER_KEY_BINDING, "text": config.key},
+            ],
             "compatibility_date": COMPATIBILITY_DATE,
-            "compatibility_flags": list(meta.compatibility_flags),
         }
 
         files: dict[str, tuple[str, bytes, str]] = {}

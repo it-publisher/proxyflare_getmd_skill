@@ -22,7 +22,6 @@
 | Тип | Latency (avg) | RPS |
 |-----|--------------|-----|
 | JavaScript | ~425 ms | ~43 |
-| Python (Pyodide) | ~410 ms | ~46 |
 | **Rust (WASM)** | **~240 ms** | **~73** |
 
 ### Установка
@@ -64,7 +63,7 @@ PROXYFLARE_API_TOKEN=your_cloudflare_api_token
 # Проверить конфигурацию и права токена
 pf config verify
 
-# Задеплоить 5 воркеров (по умолчанию python)
+# Задеплоить 5 воркеров (по умолчанию js)
 pf create --count 5
 
 # Задеплоить rust-воркеры
@@ -80,7 +79,7 @@ pf delete --all
 pf test --url https://example.com
 ```
 
-Результаты деплоя сохраняются в `proxyflare-workers.json` (в `.gitignore`).
+Результаты деплоя сохраняются в `proxyflare-workers.json` (в `.gitignore`, права `600`). В файле лежат ключи воркеров: без `X-Proxyflare-Key` воркер отвечает 401. Поведение воркеров описано в [контракте](docs/worker-contract.md).
 
 ### Клиентская библиотека
 
@@ -198,7 +197,7 @@ proxyflare/
 │   ├── cli/                # Команды: create, delete, list, test, config
 │   ├── client/             # httpx Transport + Workers Manager
 │   ├── services/           # WorkerService (Cloudflare API), Tester
-│   ├── workers/            # Исходники воркеров (py, js, rust)
+│   ├── workers/            # Исходники воркеров (js, rust)
 │   └── models/             # Pydantic-модели
 ├── telegram-md-bot/        # Telegram-бот (TypeScript, Cloudflare Worker)
 │   └── src/

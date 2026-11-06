@@ -6,7 +6,11 @@ __all__ = [
     "CONTENT_TYPES",
     "DEFAULT_DEPLOY_CONCURRENCY",
     "DEFAULT_WORKER_TIMEOUT",
+    "DEFAULT_WORKER_TYPE",
     "DEFAULT_WORKER_WAIT",
+    "WORKER_KEY_BINDING",
+    "WORKER_KEY_BYTES",
+    "WORKER_KEY_HEADER",
     "WORKER_META",
     "WORKER_TYPES",
     "WorkerMeta",
@@ -14,11 +18,18 @@ __all__ = [
 ]
 
 # Cloudflare
-COMPATIBILITY_DATE = "2024-04-01"
+# The Rust worker imports WorkerEntrypoint, which needs a date newer than early 2024
+COMPATIBILITY_DATE = "2025-05-11"
 
 # Worker Types
-WorkerType = Literal["python", "rust", "js"]
-WORKER_TYPES: set[WorkerType] = {"python", "rust", "js"}
+WorkerType = Literal["rust", "js"]
+WORKER_TYPES: set[WorkerType] = {"rust", "js"}
+DEFAULT_WORKER_TYPE: WorkerType = "js"
+
+# Worker authentication, see docs/worker-contract.md
+WORKER_KEY_HEADER = "X-Proxyflare-Key"
+WORKER_KEY_BINDING = "PROXYFLARE_KEY"
+WORKER_KEY_BYTES = 32
 
 # Defaults
 DEFAULT_DEPLOY_CONCURRENCY = 5
@@ -32,16 +43,10 @@ class WorkerMeta:
 
     main_module: str
     source_file: str
-    compatibility_flags: tuple[str, ...] = ()
     wasm_file: str | None = None
 
 
 WORKER_META: dict[WorkerType, WorkerMeta] = {
-    "python": WorkerMeta(
-        main_module="worker.py",
-        source_file="worker.py",
-        compatibility_flags=("python_workers",),
-    ),
     "js": WorkerMeta(
         main_module="worker.js",
         source_file="worker.js",
@@ -54,7 +59,6 @@ WORKER_META: dict[WorkerType, WorkerMeta] = {
 }
 
 CONTENT_TYPES: dict[str, str] = {
-    "python": "text/x-python",
     "js": "application/javascript+module",
     "rust": "application/javascript+module",
     "wasm": "application/wasm",

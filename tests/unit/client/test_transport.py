@@ -8,12 +8,15 @@ from proxyflare.client import (
     ProxyflareTransport,
     ProxyflareWorkersManager,
 )
+from proxyflare.models.worker_result import WorkerRecord
 
 
 @pytest.fixture
 def mock_manager():
     manager = Mock(spec=ProxyflareWorkersManager)
-    manager.get_worker.return_value = "https://worker.dev"
+    manager.get_worker.return_value = WorkerRecord(
+        name="w", url="https://worker.dev", type="js", created_at=1.0, key="test-key"
+    )
     return manager
 
 
@@ -36,6 +39,7 @@ def test_transport_sync_request(mock_manager):
     expected_url = "https://worker.dev?url=https%3A%2F%2Fhttpbin.org%2Fip"
     assert str(sent_request.url) == expected_url
     assert sent_request.headers["Host"] == "worker.dev"
+    assert sent_request.headers["X-Proxyflare-Key"] == "test-key"
 
 
 def test_transport_context_manager(mock_manager):
@@ -77,6 +81,7 @@ async def test_transport_async_request(mock_manager):
     expected_url = "https://worker.dev?url=https%3A%2F%2Fhttpbin.org%2Fip"
     assert str(sent_request.url) == expected_url
     assert sent_request.headers["Host"] == "worker.dev"
+    assert sent_request.headers["X-Proxyflare-Key"] == "test-key"
 
 
 @pytest.mark.asyncio

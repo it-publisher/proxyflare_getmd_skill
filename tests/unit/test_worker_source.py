@@ -22,13 +22,13 @@ def test_get_worker_source_resources(service):
         mock_resource_file.read_bytes.return_value = b"resource_content"
 
         # Execute
-        content, wasm = service.get_worker_source("python")
+        content, wasm = service.get_worker_source("js")
 
         # Verify
         assert content == "resource_content"
         assert wasm is None
-        MockResources.files.assert_called_with("proxyflare.workers.python")
-        mock_pkg.joinpath.assert_called_with("worker.py")
+        MockResources.files.assert_called_with("proxyflare.workers.js")
+        mock_pkg.joinpath.assert_called_with("worker.js")
 
 
 def test_get_worker_source_rust_resources(service):
@@ -67,7 +67,7 @@ def test_get_worker_source_not_found(service):
         MockResources.files.side_effect = FileNotFoundError
 
         with pytest.raises(FileNotFoundError, match="not found in package resources"):
-            service.get_worker_source("python")
+            service.get_worker_source("js")
 
 
 def test_get_worker_source_rust_missing_wasm(service):
