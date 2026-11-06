@@ -15,7 +15,8 @@ dependencies = [
     "pydantic-settings>=2.2.0",
     "tenacity>=8.2.0",
     "loguru>=0.7.0",
-    "cloudflare>=4.3.1",
+    # 5.x changed the format of the files argument used to upload workers
+    "cloudflare>=4.3.1,<5",
     "trafilatura>=2.0",
 ]
 

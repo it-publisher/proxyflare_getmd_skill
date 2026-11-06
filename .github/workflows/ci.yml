@@ -25,6 +25,22 @@ jobs:
       - run: uvx ty@0.0.99 check src/
       - run: uv run pytest
 
+  # `uv tool install` ignores uv.lock and takes the newest allowed versions,
+  # so what users install can differ from what the other jobs test
+  fresh-install:
+    runs-on: ubuntu-latest
+    env:
+      SKIP_RUST_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: >-
+          uv run --isolated --no-project --python 3.12
+          --with . --with pytest --with pytest-asyncio --with respx
+          pytest tests/unit/test_worker_upload.py -o addopts="" -p no:cacheprovider
+
   rust-worker:
     runs-on: ubuntu-latest
     env:
