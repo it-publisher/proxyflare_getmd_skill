@@ -10,7 +10,7 @@ repos:
     hooks:
       - id: ty
         name: ty type checker
-        entry: bash -c 'uvx ty check src/'
+        entry: bash -c 'uvx ty@0.0.99 check src/'
         language: system
         types: [python]
         pass_filenames: false

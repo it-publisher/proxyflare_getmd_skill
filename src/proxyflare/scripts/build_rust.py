@@ -1,60 +1,81 @@
 #!/usr/bin/env python3
-"""
-Script to build Rust workers for Proxyflare.
-Wraps 'cargo install -q worker-build && worker-build --release'
-"""
+"""Build the Rust worker with a pinned worker-build version."""
 
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+# worker-build rejects crate versions it doesn't support, so an unpinned install breaks the build
+# as soon as a new release appears. Keep in sync with workers/rust/wrangler.toml.
+WORKER_BUILD_VERSION = "0.8.1"
 
-def main() -> None:
-    rust_dir = Path(__file__).parent.parent / "workers" / "rust"
+RUST_DIR = Path(__file__).parent.parent / "workers" / "rust"
+LOCAL_TOOL_ROOT = RUST_DIR / "target" / "tools"
 
-    if not rust_dir.exists():
-        print(f"Error: Rust worker directory not found at {rust_dir}")
-        sys.exit(1)
 
+def has_pinned_version(command: Path) -> bool:
+    result = subprocess.run(
+        [str(command), "--version"], capture_output=True, text=True, check=False
+    )
+    return result.returncode == 0 and WORKER_BUILD_VERSION in result.stdout.split()
+
+
+def find_worker_build() -> Path | None:
+    """Return an installed worker-build of the pinned version, if there is one."""
+    on_path = shutil.which("worker-build")
+    candidates = [
+        Path(on_path) if on_path else None,
+        Path.home() / ".cargo" / "bin" / "worker-build",
+        LOCAL_TOOL_ROOT / "bin" / "worker-build",
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists() and has_pinned_version(candidate):
+            return candidate
+    return None
+
+
+def ensure_worker_build() -> Path:
+    """Find worker-build or install it next to the build, leaving the user's copy untouched."""
+    installed = find_worker_build()
+    if installed:
+        return installed
+
+    print(f"Installing worker-build {WORKER_BUILD_VERSION}...")
+    subprocess.run(
+        [
+            "cargo",
+            "install",
+            "--quiet",
+            "--locked",
+            "--version",
+            WORKER_BUILD_VERSION,
+            "--root",
+            str(LOCAL_TOOL_ROOT),
+            "worker-build",
+        ],
+        check=True,
+    )
+    return LOCAL_TOOL_ROOT / "bin" / "worker-build"
+
+
+def main() -> int:
     try:
-        # Locate worker-build executable or install it
-        worker_build_cmd = "worker-build"
-        cargo_home = Path.home() / ".cargo"
-        potential_bin = cargo_home / "bin" / "worker-build"
+        worker_build = ensure_worker_build()
+        print(f"Running {worker_build}...")
+        subprocess.run([str(worker_build), "--release"], cwd=RUST_DIR, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"\nError building Rust worker: {e}", file=sys.stderr)
+        print(
+            "Requirements: rustup (https://rustup.rs) and "
+            "`rustup target add wasm32-unknown-unknown`.",
+            file=sys.stderr,
+        )
+        return 1
 
-        if not shutil.which(worker_build_cmd) and not potential_bin.exists():
-            print("Installing 'worker-build' tool...")
-            try:
-                subprocess.run(["cargo", "install", "-q", "worker-build"], check=True)  # noqa: S607
-            except subprocess.CalledProcessError as e:
-                print(f"\nError: Failed to install 'worker-build' via cargo: {e}")
-                print("\nThis usually happens due to:")
-                print("1. Missing network connection.")
-                print("2. Cargo/Rust not being installed or not in PATH.")
-                print("3. Permission issues.")
-                print("\nPlease ensure Rust is installed (https://rustup.rs/) and try again.")
-                sys.exit(1)
-
-        if not shutil.which(worker_build_cmd) and potential_bin.exists():
-            worker_build_cmd = str(potential_bin)
-
-        print(f"Running build with {worker_build_cmd}...")
-        subprocess.run([worker_build_cmd, "--release"], cwd=rust_dir, check=True)
-
-        print("Build successful!")
-
-    except subprocess.CalledProcessError as e:
-        print(f"\nError building Rust worker: {e}")
-        print("\nPossible solutions:")
-        print("1. Ensure Rust and Cargo are installed.")
-        print("2. Ensure you have network access for 'cargo install'.")
-        print("3. Check for compilation errors in the Rust code.")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        sys.exit(1)
+    print("Build successful!")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

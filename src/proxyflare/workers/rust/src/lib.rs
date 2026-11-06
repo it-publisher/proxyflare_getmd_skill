@@ -6,31 +6,24 @@ mod utils;
 /// Params to filter from the proxied URL (cache-busters and routing param).
 const FILTERED_PARAMS: &[&str] = &["url", "_cb", "_t"];
 
-fn generate_random_ip() -> String {
-    let now = Date::now().as_millis();
-    let mut seed = now;
+/// The seed is a parameter because `Date::now` only works on wasm, which native tests can't use.
+fn generate_random_ip(seed: u64) -> String {
+    let mut state = seed;
 
     // Simple Linear Congruential Generator (LCG)
     // Using constants from MMIX by Donald Knuth
-    let mut next_rand = || {
-        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
-        // Extract 8 bits from the high-order bits
-        ((seed >> 32) & 0xFF) as u8
+    let mut next_octet = || {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        // High-order bits have the best randomness. Octets stay in 1-255, like in the other workers.
+        (((state >> 32) & 0xFF) as u8).max(1)
     };
 
-    // Ensure first octet is not 0 (though 0 is technically valid IP, often reserved)
-    // Python implementation uses 1-255.
-    let o1 = match next_rand() {
-        0 => 1,
-        x => x,
-    };
-    
     format!(
         "{}.{}.{}.{}",
-        o1,
-        next_rand(),
-        next_rand(),
-        next_rand()
+        next_octet(),
+        next_octet(),
+        next_octet(),
+        next_octet()
     )
 }
 
@@ -77,7 +70,7 @@ pub async fn do_main(req: Request, _env: Env) -> Result<Response> {
 
     // 0. Handle CORS preflight
     if method == Method::Options {
-        let mut headers = Headers::new();
+        let headers = Headers::new();
         headers.set("Access-Control-Allow-Origin", "*")?;
         headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD")?;
         headers.set("Access-Control-Allow-Headers", "*")?;
@@ -159,7 +152,7 @@ pub async fn do_main(req: Request, _env: Env) -> Result<Response> {
     }
 
     // 2. Prepare headers
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     let mut has_forwarded_for = false;
     for (key, value) in req.headers() {
         let key_lower = key.to_lowercase();
@@ -175,7 +168,7 @@ pub async fn do_main(req: Request, _env: Env) -> Result<Response> {
         }
     }
     if !has_forwarded_for {
-        headers.set("X-Forwarded-For", &generate_random_ip())?;
+        headers.set("X-Forwarded-For", &generate_random_ip(Date::now().as_millis()))?;
     }
 
     // 3. Request Body & Init
@@ -197,7 +190,7 @@ pub async fn do_main(req: Request, _env: Env) -> Result<Response> {
     let mut response = Fetch::Request(fetch_request).send().await?;
 
     // 5. Process Response Headers
-    let mut new_headers = Headers::new();
+    let new_headers = Headers::new();
     for (key, value) in response.headers() {
          let key_lower = key.to_lowercase();
          if !matches!(key_lower.as_str(), "content-encoding" | "content-length" | "transfer-encoding") {
@@ -232,29 +225,32 @@ mod tests {
 
     #[test]
     fn test_generate_random_ip_format() {
-        let ip = generate_random_ip();
+        let ip = generate_random_ip(1_771_765_050_000);
         let parts: Vec<&str> = ip.split('.').collect();
         assert_eq!(parts.len(), 4, "IP must have 4 octets: {ip}");
 
         for part in &parts {
-            let octet: u8 = part.parse().unwrap_or_else(|_| {
+            part.parse::<u8>().unwrap_or_else(|_| {
                 panic!("Octet '{part}' is not a valid u8 in IP: {ip}")
             });
-            assert!(octet >= 1, "Octet must be >= 1, got {octet} in {ip}");
-            // u8 max is 255, so no need to check upper bound explicitly
         }
     }
 
     #[test]
     fn test_generate_random_ip_nonzero_octets() {
-        // Run multiple times to increase confidence
-        for _ in 0..10 {
-            let ip = generate_random_ip();
+        // With 256 possible values per octet, this many seeds is sure to hit a zero before the fix
+        for seed in 0..10_000 {
+            let ip = generate_random_ip(seed);
             for part in ip.split('.') {
                 let octet: u8 = part.parse().expect("valid octet");
-                assert!(octet >= 1, "0 is not a valid octet for X-Forwarded-For");
+                assert!(octet >= 1, "0 is not a valid octet for X-Forwarded-For: {ip}");
             }
         }
+    }
+
+    #[test]
+    fn test_generate_random_ip_depends_on_seed() {
+        assert_ne!(generate_random_ip(1), generate_random_ip(2));
     }
 
     #[test]

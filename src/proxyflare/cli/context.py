@@ -1,6 +1,6 @@
 """Typed application context and factory for CLI commands."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
@@ -24,7 +24,7 @@ class AppContext:
 
 
 @asynccontextmanager
-async def get_app_context() -> AsyncIterator[AppContext]:
+async def get_app_context() -> AsyncGenerator[AppContext]:
     """Async context manager for dependency initialization.
 
     Ensures AsyncCloudflare is created within the running event loop.

@@ -27,6 +27,7 @@ dev = [
     "pytest-xdist>=3.5.0",
     "respx>=0.21.0",
     "trafilatura>=2.0",  # needed to test web_to_md.py
+    "hatchling",  # needed to test hatch_build.py
 
     # Code Quality
     "ruff>=0.3.0",
@@ -49,6 +50,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/proxyflare"]
+# build/ is gitignored, and hatch leaves out ignored files unless they are listed as artifacts
+artifacts = [
+    "src/proxyflare/workers/rust/build/index.js",
+    "src/proxyflare/workers/rust/build/index_bg.wasm",
+]
 
 [tool.hatch.build.hooks.custom]
 
@@ -69,13 +75,10 @@ select = [
     "S",    # flake8-bandit (security)
     "T20",  # flake8-print
 ]
-ignore = [
-    "ANN101",  # Missing type annotation for self
-    "ANN102",  # Missing type annotation for cls
-]
 
 [tool.ruff.lint.per-file-ignores]
 "web_to_md.py" = ["T20"]  # CLI: print is its user interface
+"hatch_build.py" = ["T20", "S603"]  # Runs only at build time, on the project's own script
 "tests/**/*.py" = [
     "S101",  # Use of assert
     "ANN",   # Type annotations not required in tests

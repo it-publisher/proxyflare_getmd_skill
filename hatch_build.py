@@ -8,40 +8,43 @@ from hatchling.builders.hooks.plugin.interface import (  # ty:ignore[unresolved-
     BuildHookInterface,
 )
 
+RUST_DIR = Path("src/proxyflare/workers/rust")
+BUILD_SCRIPT = Path("src/proxyflare/scripts/build_rust.py")
+
+
+def is_rust_build_current(rust_dir: Path) -> bool:
+    """Tell whether the WASM artifact exists and is newer than every Rust source."""
+    wasm_artifact = rust_dir / "build" / "index_bg.wasm"
+    if not wasm_artifact.exists():
+        return False
+
+    sources = [*(rust_dir / "src").rglob("*.rs"), rust_dir / "Cargo.toml", rust_dir / "Cargo.lock"]
+    newest_source_mtime = max(source.stat().st_mtime for source in sources)
+    return wasm_artifact.stat().st_mtime >= newest_source_mtime
+
 
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
-        project_root = Path.cwd()
-
-        # Explicit opt-out
         if os.environ.get("SKIP_RUST_BUILD"):
-            print("SKIP_RUST_BUILD set — skipping Rust worker build.")  # noqa: T201
+            print("SKIP_RUST_BUILD set — skipping Rust worker build.")
             return
 
-        # Pre-built artifacts are committed to the repo; no need to rebuild.
-        wasm_artifact = (
-            project_root / "src" / "proxyflare" / "workers" / "rust" / "build" / "index_bg.wasm"
+        project_root = Path(self.root)
+        if is_rust_build_current(project_root / RUST_DIR):
+            print("Rust worker artifacts are up to date — skipping build.")
+            return
+
+        print("Building Rust worker...")
+        result = subprocess.run(
+            [sys.executable, str(project_root / BUILD_SCRIPT)],
+            cwd=project_root,
+            check=False,
         )
-        if wasm_artifact.exists():
-            print("Pre-built Rust artifacts found — skipping Rust worker build.")  # noqa: T201
+        if result.returncode == 0:
             return
 
-        print("Running CustomBuildHook to build Rust worker...")  # noqa: T201
-        script_path = project_root / "src" / "proxyflare" / "scripts" / "build_rust.py"
+        if os.environ.get("REQUIRE_RUST_BUILD"):
+            raise RuntimeError("Rust worker build failed and REQUIRE_RUST_BUILD is set")
 
-        if not script_path.exists():
-            print(f"Warning: Rust build script not found at {script_path}. Skipping.")  # noqa: T201
-            return
-
-        try:
-            print(f"Executing: {sys.executable} {script_path}")  # noqa: T201
-            subprocess.run([sys.executable, str(script_path)], check=True, cwd=str(project_root))  # noqa: S603
-            print("Build hook complete.")  # noqa: T201
-        except subprocess.CalledProcessError as e:
-            print(f"Error in build hook (Rust compilation failed): {e}")  # noqa: T201
-            print("Please check the output above for Rust/Cargo errors.")  # noqa: T201
-            print("Ensure Rust is installed (https://rustup.rs/) and you have network access.")  # noqa: T201
-            raise RuntimeError("Rust worker build failed") from e
-        except Exception as e:
-            print(f"Unexpected error in build hook: {e}")  # noqa: T201
-            raise RuntimeError("Unexpected build hook error") from e
+        # JS workers need no toolchain, so a missing one must not block the whole install
+        print("WARNING: Rust worker build failed. `pf create --type rust` will not work.")

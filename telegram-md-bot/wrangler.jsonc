@@ -10,6 +10,8 @@
 	// Secrets (set via: npx wrangler secret put <NAME>)
 	// TELEGRAM_BOT_TOKEN
 	// ALLOWED_CHAT_ID  ← admin chat ID
+	// WEBHOOK_SECRET   ← must match secret_token passed to setWebhook
+	// JINA_API_KEY     ← optional
 	"kv_namespaces": [
 		{ "binding": "ALLOWED_USERS", "id": "6a23095750454a4aa7df6432cee84901" },
 	],

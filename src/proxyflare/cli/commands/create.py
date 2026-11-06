@@ -1,7 +1,7 @@
 import asyncio
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -103,7 +103,7 @@ async def _create_async(
                 f"Invalid worker type '{final_worker_type_str}'. Must be 'python', 'rust', or 'js'."
             )
 
-        final_worker_type = cast(WorkerType, final_worker_type_str)
+        final_worker_type: WorkerType = final_worker_type_str
 
         # Load Source
         try:
