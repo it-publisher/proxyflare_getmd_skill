@@ -26,6 +26,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.5.0",
     "respx>=0.21.0",
+    "trafilatura>=2.0",  # needed to test web_to_md.py
 
     # Code Quality
     "ruff>=0.3.0",
@@ -74,6 +75,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
+"web_to_md.py" = ["T20"]  # CLI: print is its user interface
 "tests/**/*.py" = [
     "S101",  # Use of assert
     "ANN",   # Type annotations not required in tests
