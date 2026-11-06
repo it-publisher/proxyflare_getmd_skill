@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from proxyflare.constants import COMPATIBILITY_DATE
 from proxyflare.scripts import build_rust
 
 
@@ -85,3 +86,10 @@ def test_main_builds_in_rust_dir(isolated_paths):
 def test_wrangler_config_pins_the_same_version():
     wrangler_config = tomllib.loads((build_rust.RUST_DIR / "wrangler.toml").read_text())
     assert f"--version {build_rust.WORKER_BUILD_VERSION} " in wrangler_config["build"]["command"]
+
+
+@pytest.mark.parametrize("worker_type", ["js", "rust"])
+def test_wrangler_configs_use_the_deployed_compatibility_date(worker_type):
+    config_path = build_rust.RUST_DIR.parent / worker_type / "wrangler.toml"
+    wrangler_config = tomllib.loads(config_path.read_text())
+    assert wrangler_config["compatibility_date"] == COMPATIBILITY_DATE

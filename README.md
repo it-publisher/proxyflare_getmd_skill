@@ -2,92 +2,147 @@
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Coverage](https://img.shields.io/badge/coverage-83%25-brightgreen.svg)
+[![CI](https://github.com/it-publisher/proxyflare_getmd_skill/actions/workflows/ci.yml/badge.svg)](https://github.com/it-publisher/proxyflare_getmd_skill/actions/workflows/ci.yml)
 
-Инструментарий для работы с Cloudflare Workers как прокси-сетью. Два компонента:
+Инструменты для работы с Cloudflare Workers как с сетью прокси и для сохранения статей в Markdown.
 
-- **Proxyflare CLI** — Python-утилита для деплоя и управления пулом прокси-воркеров
-- **telegram-md-bot** — Telegram-бот, который принимает URL статей и возвращает `.md`-файл
+| Компонент | Что делает |
+|-----------|------------|
+| `pf` | CLI: разворачивает пул прокси-воркеров и управляет им |
+| `pf md` | Скачивает статью через пул и сохраняет как `.md` |
+| Клиентская библиотека | httpx-транспорт, отправляющий запросы через пул |
+| `telegram-md-bot` | Telegram-бот: присылаешь ссылку, получаешь `.md`-файл. Не использует пул |
+
+Основано на [FlareProx](https://github.com/MrTurvey/flareprox).
 
 ---
 
-## Proxyflare CLI
-
-### Что делает
-
-Разворачивает десятки прокси-воркеров на Cloudflare Workers одной командой. Каждый воркер принимает целевой URL и проксирует запрос — через query-параметр, заголовок или путь.
-
-Поддерживаемые типы воркеров:
-
-| Тип | Latency (avg) | RPS |
-|-----|--------------|-----|
-| JavaScript | ~425 ms | ~43 |
-| **Rust (WASM)** | **~240 ms** | **~73** |
-
-### Установка
+## Установка
 
 Требования: Python 3.12+, [uv](https://docs.astral.sh/uv/).
 
-Rust нужен только для Rust-воркеров: [rustup](https://rustup.rs) и `rustup target add wasm32-unknown-unknown`. Без него установка тоже пройдёт, но `pf create --type rust` работать не будет.
-
 ```bash
-git clone https://github.com/AntonKoshuba/proxyflare.git
-cd proxyflare
-uv sync
+git clone https://github.com/it-publisher/proxyflare_getmd_skill.git
+cd proxyflare_getmd_skill
 uv tool install .
 ```
 
-### Конфигурация
+Rust нужен только для Rust-воркеров. Без него установка тоже пройдёт, но `pf create --type rust` работать не будет:
 
-Создай `~/.config/proxyflare/.env` (шаблон: `.env.example`):
+```bash
+rustup target add wasm32-unknown-unknown
+uv tool install --force .
+```
+
+### Настройка
+
+Создай `~/.config/proxyflare/.env` (шаблон: `.env.example`) и закрой его от других пользователей:
+
+```bash
+mkdir -p -m 700 ~/.config/proxyflare
+cp .env.example ~/.config/proxyflare/.env
+chmod 600 ~/.config/proxyflare/.env
+```
 
 ```env
 PROXYFLARE_ACCOUNT_ID=your_cloudflare_account_id
 PROXYFLARE_API_TOKEN=your_cloudflare_api_token
 ```
 
-Команды работают из любой папки. Переменные окружения важнее файла, а `PROXYFLARE_CONFIG_DIR` меняет папку конфигурации. `.env` в текущей папке не читается.
+- Команды работают из любой папки, `.env` в текущей папке не читается
+- Переменные окружения важнее файла
+- `PROXYFLARE_CONFIG_DIR` меняет папку конфигурации
 
-#### Требования к API-токену
+### API-токен
 
-В Cloudflare Dashboard → My Profile → API Tokens → Create Token (Custom):
+Cloudflare Dashboard → My Profile → API Tokens → Create Token. Шаблон **Edit Cloudflare Workers** подходит и для `pf`, и для деплоя бота.
 
-- **User → User Details → Read**
-- **User → Memberships → Read**
-- **Account → Workers Scripts → Edit**
-- **Account → Account Settings → Read**
+Для одного только `pf` достаточно своего токена (Custom) с правами:
 
-Оставь Account Resources и Zone Resources как **Include → All**.
+- User → User Details → Read
+- User → Memberships → Read
+- Account → Workers Scripts → Edit
+- Account → Account Settings → Read
 
-### Команды
+`pf config verify` проверит токен. Предупреждение `Could not fetch permissions` означает лишь, что токен не может прочитать собственные права, и работе не мешает.
+
+---
+
+## Команды `pf`
 
 ```bash
-# Проверить конфигурацию и права токена
-pf config verify
+pf config verify                     # Проверить конфигурацию и токен
+pf config show                       # Показать настройки и пути к файлам
 
-# Задеплоить 5 воркеров (по умолчанию js)
-pf create --count 5
+pf create --count 5                  # Задеплоить 5 JS-воркеров
+pf create --count 3 --type rust      # Задеплоить Rust-воркеры
+pf list                              # Список воркеров на аккаунте
 
-# Задеплоить rust-воркеры
-pf create --count 3 --type rust
+pf test                              # По одному запросу через каждый воркер
+pf test --url https://example.com --limit 10
 
-# Список активных воркеров
-pf list
+pf delete proxyflare-123-abc         # Удалить один воркер
+pf delete --all                      # Удалить все воркеры с префиксом proxyflare-
 
-# Удалить все воркеры
-pf delete --all
-
-# Протестировать пул
-pf test --url https://example.com
+pf md "https://example.com/article"  # Сохранить статью в Markdown
 ```
 
-Воркеры записываются в `~/.config/proxyflare/workers.json` с правами `600`: `pf create` дополняет файл, `pf delete` убирает из него удалённые. В файле лежат ключи воркеров: без `X-Proxyflare-Key` воркер отвечает 401. Поведение воркеров описано в [контракте](docs/worker-contract.md).
+Коды возврата: `0` при успехе, `1` при ошибке, в том числе частичной, например если не удалось удалить часть воркеров, `2` при некорректных аргументах.
 
-### Клиентская библиотека
+### Типы воркеров
+
+| Тип | Сборка | Latency (avg) | RPS |
+|-----|--------|---------------|-----|
+| JavaScript (по умолчанию) | Не нужна | ~425 ms | ~43 |
+| Rust (WASM) | Нужен Rust | ~240 ms | ~73 |
+
+⚠️ Цифры взяты из старых замеров, с тех пор воркеры изменились. Как замерить самому, описано в разделе [Разработка](#разработка).
+
+### Файл воркеров
+
+Воркеры записываются в `~/.config/proxyflare/workers.json`:
+
+- `pf create` дополняет файл, а если файл повреждён, отказывается деплоить
+- `pf delete` убирает удалённые воркеры, неудачно удалённые остаются
+- В файле лежат ключи воркеров, поэтому он доступен только владельцу (права `600`)
+- Файл из версий до 0.2.0 не читается: удали старые воркеры, файл и создай новые
+
+### Как работают воркеры
+
+Каждый воркер принимает целевой URL через query-параметр, заголовок или путь и отвечает только на запросы с верным заголовком `X-Proxyflare-Key`. Точное поведение описано в [контракте](docs/worker-contract.md).
+
+---
+
+## `pf md`: URL → Markdown
+
+```bash
+pf md "https://habr.com/ru/articles/123456/"
+```
+
+Адрес бери в кавычки, иначе zsh споткнётся о `?` и `&`.
+
+| Аргумент | Назначение | По умолчанию |
+|----------|------------|--------------|
+| `url` | Ссылка на статью | Обязательный |
+| `-o, --output` | Папка сохранения | `articles/` в текущей папке |
+| `--workers-file` | Файл воркеров | `~/.config/proxyflare/workers.json` |
+
+- В начале файла идут метаданные: `title`, `source`, `saved`
+- В stdout выводится только путь к файлу, сообщения идут в stderr
+- Если воркер не отвечает, запрос повторяется через другой, но не более 3 попыток
+- Ошибки самого сайта, например 403 или 404, не повторяются
+- Существующий файл не перезаписывается: новый получит суффикс `-2`, `-3` и так далее
+
+⚠️ Иногда `trafilatura` принимает за статью один вложенный блок и отбрасывает остальное. Дело не в размере: страница RFC на 1159 КБ теряла 99% текста, а сгенерированная на 624 КБ сохранялась полностью. Если извлечено меньше 10% текста большой страницы, `pf md` сохранит весь текст без форматирования и предупредит об этом. Порог подобран на трёх страницах, менее заметные потери останутся незамеченными.
+
+---
+
+## Клиентская библиотека
 
 ```python
 import httpx
-from proxyflare.client import ProxyflareWorkersManager, AsyncProxyflareTransport
+
+from proxyflare.client import AsyncProxyflareTransport, ProxyflareWorkersManager
 from proxyflare.paths import get_workers_file
 
 manager = ProxyflareWorkersManager(get_workers_file())
@@ -97,119 +152,156 @@ async with httpx.AsyncClient(transport=transport) as client:
     response = await client.get("https://example.com")
 ```
 
+Есть и синхронный `ProxyflareTransport`. Каждый запрос идёт через случайный воркер из пула.
+
+---
+
+## Что видит сайт
+
+Прокси скрывает твой IP от сайта, но не делает запрос неотличимым от обычного:
+
+- **`CF-Worker`:** Cloudflare добавляет этот заголовок с именем воркера или поддоменом, и убрать его нельзя. Сайт легко может опознать такой запрос и заблокировать его
+- **`X-Forwarded-For`:** воркер подставляет случайный IP или значение из `X-My-X-Forwarded-For`
+- **`User-Agent`:** `pf md` представляется браузером Chrome
+
+Ответственность за использование на тебе: соблюдай условия Cloudflare и условия сайтов, к которым обращаешься.
+
 ---
 
 ## telegram-md-bot
 
-### Что делает
+Telegram-бот на Cloudflare Workers. Статью извлекает Readability, в Markdown переводит node-html-markdown.
 
-Telegram-бот на Cloudflare Workers. Пришли ему ссылку — получишь `.md`-файл с текстом статьи.
-
-Использует Readability для извлечения контента и node-html-markdown для конвертации.
+Если сайт отвечает 403 или 429, бот скачивает страницу через сервис [Jina Reader](https://r.jina.ai). ⚠️ В этом случае адрес страницы уходит стороннему сервису.
 
 ### Деплой
 
-Требования: Node.js 18+, аккаунт Cloudflare
+Требования: Node.js 22+, аккаунт Cloudflare, токен (см. [API-токен](#api-токен)).
 
-```bash
-cd telegram-md-bot
-npm install
-```
+1. Создай бота через [@BotFather](https://t.me/BotFather) и узнай свой chat ID через [@userinfobot](https://t.me/userinfobot).
+2. Установи зависимости и задай доступ к Cloudflare:
 
-Создай бота через [@BotFather](https://t.me/BotFather), получи токен.
-Узнай свой chat ID через [@userinfobot](https://t.me/userinfobot).
+   ```bash
+   cd telegram-md-bot
+   npm install
+   read -s "CLOUDFLARE_API_TOKEN?Токен Cloudflare: "; echo
+   export CLOUDFLARE_API_TOKEN
+   ```
 
-Настрой `wrangler.jsonc` — укажи свой `account_id`:
+   Строку с `read` вводи отдельно, а не блоком: иначе она примет за токен следующую строку. Если у токена несколько аккаунтов, задай ещё `CLOUDFLARE_ACCOUNT_ID`.
 
-```jsonc
-{
-  "account_id": "your_cloudflare_account_id",
-  ...
-}
-```
+3. Создай KV-хранилище для списка пользователей и впиши его `id` в `kv_namespaces` в `wrangler.jsonc`:
 
-Задеплой воркер:
+   ```bash
+   npx wrangler kv namespace create ALLOWED_USERS
+   ```
 
-```bash
-CLOUDFLARE_API_TOKEN=your_token npx wrangler deploy
-```
+4. Задеплой воркер:
 
-Установи секреты:
+   ```bash
+   npx wrangler deploy
+   ```
 
-```bash
-CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put TELEGRAM_BOT_TOKEN
-CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put ALLOWED_CHAT_ID
-CLOUDFLARE_API_TOKEN=your_token npx wrangler secret put WEBHOOK_SECRET
-```
+5. Задай секреты. `WEBHOOK_SECRET` останется в переменной для следующего шага:
 
-`WEBHOOK_SECRET` — случайная строка из символов `A-Z`, `a-z`, `0-9`, `_` и `-`, например результат `openssl rand -hex 32`. Без неё воркер отвечает 401 на все обновления.
+   ```bash
+   npx wrangler secret put TELEGRAM_BOT_TOKEN
+   npx wrangler secret put ALLOWED_CHAT_ID
+   npx wrangler secret put JINA_API_KEY  # необязательно: повышает лимиты Jina
 
-Зарегистрируй вебхук с тем же секретом:
+   WEBHOOK_SECRET=$(openssl rand -hex 32)
+   printf '%s' "$WEBHOOK_SECRET" | npx wrangler secret put WEBHOOK_SECRET
+   ```
 
-```bash
-TELEGRAM_BOT_TOKEN=your_bot_token \
-WORKER_URL=https://telegram-md-bot.YOUR_SUBDOMAIN.workers.dev \
-WEBHOOK_SECRET=your_secret \
-npx tsx scripts/set-webhook.mts
-```
+6. Зарегистрируй webhook. Без него Telegram не будет отправлять сообщения боту, а без верного секрета воркер отвечает 401:
+
+   ```bash
+   read -s "TELEGRAM_BOT_TOKEN?Токен бота: "; echo
+   ```
+
+   ```bash
+   TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
+   WORKER_URL=https://telegram-md-bot.YOUR_SUBDOMAIN.workers.dev \
+   WEBHOOK_SECRET="$WEBHOOK_SECRET" \
+   npx tsx scripts/set-webhook.mts
+   ```
+
+### Обновление работающего бота до версии с `WEBHOOK_SECRET`
+
+Порядок важен: сначала секрет (шаг 5), затем `wrangler deploy` и сразу webhook (шаг 6). Между деплоем и шагом 6 бот отвечает Telegram 401, потом обновления доставятся повторно.
 
 ### Использование
 
-Просто отправь боту ссылку:
+| Сообщение | Кто может | Результат |
+|-----------|-----------|-----------|
+| Текст со ссылкой | Админ и разрешённые пользователи | `.md`-файл со статьёй |
+| `/add <id>` | Админ (`ALLOWED_CHAT_ID`) | Разрешить пользователя |
+| `/remove <id>` | Админ | Запретить пользователя |
+| `/list` | Админ | Список разрешённых |
 
-```
-https://habr.com/ru/articles/123456/
-```
-
-Бот ответит `.md`-файлом с текстом статьи.
-
-> Сайты за paywall (401) или с жёсткой защитой от ботов вернут ошибку.
+Остальные пользователи не получают ответа. Сайты за paywall или с жёсткой защитой от ботов вернут ошибку.
 
 ---
 
-## Команда `pf md`: URL → Markdown
-
-Скачивает страницу через пул воркеров и сохраняет её как `.md`. Работает из любой папки.
+## Разработка
 
 ```bash
-pf md "https://habr.com/ru/articles/123456/"
+uv sync --extra dev
+
+uv run pytest                          # Unit-тесты
+uv run pytest tests/contract --no-cov  # Контракт воркеров через wrangler dev, нужен Node.js
+uv run ruff check . && uv run ruff format --check .
+uvx ty@0.0.99 check src/
+
+cd src/proxyflare/workers/rust && cargo test  # Rust
+
+cd telegram-md-bot && npm ci && npx vitest run  # Бот
 ```
 
-Адрес бери в кавычки, иначе zsh споткнётся о `?` и `&`.
+⚠️ `uv run pytest tests/remote --no-cov` деплоит настоящие воркеры на твой аккаунт Cloudflare и удаляет их после тестов.
 
-| Флаг | Назначение | По умолчанию |
-|------|------------|--------------|
-| `url` | Ссылка на статью (обязательный) | — |
-| `-o, --output` | Папка сохранения | `articles/` в текущей папке |
-| `--workers-file` | Файл воркеров | `~/.config/proxyflare/workers.json` |
+| Переменная сборки | Действие |
+|-------------------|----------|
+| `SKIP_RUST_BUILD=1` | Не собирать Rust-воркер |
+| `REQUIRE_RUST_BUILD=1` | Считать неудачную сборку ошибкой, а не предупреждением |
 
-- В начале файла идут метаданные: `title`, `source`, `saved`
-- В stdout выводится только путь к файлу, сообщения идут в stderr
-- Код возврата: `0` при успехе, `1` при ошибке, `2` при некорректном URL
-- Если воркер не отвечает, запрос повторяется через другой, но не более 3 попыток
-- Ошибки самого сайта, например 403 или 404, не повторяются
-- Существующий файл не перезаписывается: новый получит суффикс `-2`, `-3` и так далее
+### Бенчмарк
 
-> Иногда `trafilatura` принимает за статью один вложенный блок и отбрасывает остальное. Дело не в размере: страница RFC на 1159 КБ теряла 99% текста, а сгенерированная на 624 КБ сохранялась полностью. Если извлечено меньше 10% текста большой страницы, `pf md` сохранит весь текст без форматирования и предупредит об этом. Порог эвристический, на других страницах проблема может остаться незамеченной.
+Запусти воркер локально через `wrangler dev`, а затем:
+
+```bash
+uv run python scripts/benchmark_worker.py \
+  --worker-url http://localhost:8787 \
+  --key "$PROXYFLARE_WORKER_KEY" \
+  --target-url https://example.com \
+  --concurrency 5 \
+  --requests 50
+```
+
+Ключ можно передать переменной окружения `PROXYFLARE_WORKER_KEY`, чтобы он не попал в историю команд. Бенчмарк создаёт настоящую нагрузку на целевой сайт, так что используй свой сервер.
 
 ---
 
 ## Структура репозитория
 
-```
-proxyflare/
+```text
+proxyflare_getmd_skill/
 ├── src/proxyflare/         # CLI и клиентская библиотека (Python)
-│   ├── cli/                # Команды: create, delete, list, test, config, md
-│   ├── client/             # httpx Transport + Workers Manager
-│   ├── services/           # WorkerService (Cloudflare API), Tester
+│   ├── cli/                # Команды: config, create, delete, list, md, test
+│   ├── client/             # httpx-транспорт и менеджер воркеров
+│   ├── services/           # WorkerService (Cloudflare API)
 │   ├── workers/            # Исходники воркеров (js, rust)
-│   └── models/             # Pydantic-модели
+│   ├── models/             # Pydantic-модели
+│   ├── scripts/            # Сборка Rust-воркера
+│   ├── markdown.py         # Скачивание и извлечение статей
+│   └── paths.py            # Расположение файлов
 ├── telegram-md-bot/        # Telegram-бот (TypeScript, Cloudflare Worker)
-│   └── src/
-│       ├── index.ts        # Обработчик вебхука
-│       ├── scraper.ts      # Фетч и парсинг статей
-│       └── telegram.ts     # Telegram Bot API
-├── tests/                  # Unit, integration, e2e тесты
+├── docs/worker-contract.md # Контракт воркеров
+├── scripts/                # Бенчмарк
+├── tests/
+│   ├── unit/               # Без сети
+│   ├── contract/           # Воркеры через wrangler dev
+│   └── remote/             # Настоящий Cloudflare
 └── .env.example            # Шаблон конфигурации
 ```
 
