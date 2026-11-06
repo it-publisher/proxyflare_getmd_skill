@@ -23,10 +23,15 @@ async def wait_for_worker(url: str) -> None:
         raise RuntimeError(f"Worker not ready: {response.status_code}")
 
 
+@pytest.fixture(autouse=True)
+def isolated_config_dir() -> None:
+    """Overrides the isolation from tests/conftest.py: these tests need the real configuration."""
+
+
 @pytest.fixture(scope="session")
 def config() -> Config:
     try:
-        return Config()  # ty: ignore[missing-argument]
+        return Config.load()
     except Exception as e:
         pytest.skip(f"Configuration not valid: {e}")
 

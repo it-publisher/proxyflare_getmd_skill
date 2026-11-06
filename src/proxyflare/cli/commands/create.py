@@ -16,8 +16,10 @@ from proxyflare.constants import (
     WORKER_TYPES,
     WorkerType,
 )
+from proxyflare.exceptions import ProxyflareError
 from proxyflare.models.deployment import DeploymentConfig
 from proxyflare.models.worker_result import WorkerRecord, WorkerResultFile
+from proxyflare.paths import get_workers_file
 
 if TYPE_CHECKING:
     from rich.progress import TaskID
@@ -102,6 +104,12 @@ async def _create_async(
         ConfigError: If configuration is invalid.
         WorkerError: If deployment fails.
     """
+    # Checked before deploying, or new workers would end up with nowhere to be recorded
+    try:
+        existing_workers = WorkerResultFile.load_or_empty(result).root
+    except ValueError as e:
+        raise ConfigError(f"Workers file {result} is invalid, fix or remove it: {e}") from e
+
     async with get_app_context() as ctx:
         # Resolve worker type
         final_worker_type_str = worker_type or ctx.config.worker_type
@@ -120,10 +128,7 @@ async def _create_async(
         except FileNotFoundError as e:
             raise WorkerError(str(e)) from e
         except Exception as e:
-            raise WorkerError(
-                f"Failed to load worker source: {e}\n"
-                "Hint: For Rust workers, ensure artifacts are built (proxyflare init)."
-            ) from e
+            raise WorkerError(f"Failed to load worker source: {e}") from e
 
         with Progress(
             SpinnerColumn(),
@@ -151,34 +156,37 @@ async def _create_async(
                     task_create,
                 )
 
-            except RuntimeError as e:
-                raise WorkerError(str(e)) from e
+            except ProxyflareError:
+                raise
             except Exception as e:
                 raise WorkerError(
-                    "Could not complete deployment. Check your API token and account settings."
+                    f"Could not complete deployment. Check your API token and account settings: {e}"
                 ) from e
 
-        # Save Results
-        if results_data:
-            WorkerResultFile(root=results_data).save(result)
+        if not results_data:
+            raise WorkerError("No workers were created.")
 
-            console.print(
-                f"\n[bold green]Successfully created {len(results_data)} workers![/bold green]"
-            )
-            console.print(f"Results saved to: [bold]{result}[/bold]")
-        else:
-            console.print("\n[yellow]No workers were created.[/yellow]")
+        WorkerResultFile(root=[*existing_workers, *results_data]).save(result)
+        console.print(
+            f"\n[bold green]Successfully created {len(results_data)} workers![/bold green]"
+        )
+        console.print(f"Results saved to: [bold]{result}[/bold]")
+
+        failed_count = count - len(results_data)
+        if failed_count:
+            raise WorkerError(f"{failed_count} of {count} workers failed to deploy.")
 
 
 def create(
-    count: Annotated[int, typer.Option(help="Number of workers to create")] = 1,
+    count: Annotated[int, typer.Option(min=1, help="Number of workers to create")] = 1,
     worker_type: Annotated[
         str | None,
         typer.Option("--type", help="Type of worker (js/rust). Defaults to config."),
     ] = None,
-    result: Annotated[Path, typer.Option(help="Path to save result JSON")] = Path(
-        "proxyflare-workers.json"
-    ),
+    result: Annotated[
+        Path | None,
+        typer.Option(help="Workers file to add to [default: in config directory]"),
+    ] = None,
 ) -> None:
     """Deploy new Cloudflare proxy workers."""
-    asyncio.run(_create_async(count, worker_type, result))
+    asyncio.run(_create_async(count, worker_type, result or get_workers_file()))

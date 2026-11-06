@@ -40,8 +40,7 @@ class ProxyflareWorkersManager:
             raise FileNotFoundError(f"Worker file not found: {file_path}")
 
         try:
-            data = file_path.read_text(encoding="utf-8")
-            self.workers = WorkerResultFile.model_validate_json(data).root
+            self.workers = WorkerResultFile.load_or_empty(file_path).root
         except Exception as e:
             raise ValueError(f"Failed to parse worker file: {e}") from e
 

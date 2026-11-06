@@ -1,4 +1,5 @@
 import io
+import json
 import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -141,6 +142,81 @@ def test_delete_all_cancelled(mock_ctx):
     mock_ctx.service.delete_worker.assert_not_called()
 
 
+def make_workers_file(path, *names):
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "name": name,
+                    "url": f"https://{name}.dev",
+                    "type": "js",
+                    "created_at": 1.0,
+                    "key": "k",
+                }
+                for name in names
+            ]
+        )
+    )
+    return path
+
+
+def saved_names(path):
+    return [worker["name"] for worker in json.loads(path.read_text())]
+
+
+def test_delete_removes_worker_from_file(mock_ctx, tmp_path):
+    path = make_workers_file(tmp_path / "w.json", "proxyflare-1", "proxyflare-2")
+
+    args = ["delete", "--force", "proxyflare-1", "--workers-file", str(path)]
+    assert runner.invoke(app, args).exit_code == 0
+
+    assert saved_names(path) == ["proxyflare-2"]
+
+
+def test_delete_uses_workers_file_in_config_dir_by_default(mock_ctx, isolated_config_dir):
+    isolated_config_dir.mkdir()
+    path = make_workers_file(isolated_config_dir / "workers.json", "proxyflare-1")
+
+    assert runner.invoke(app, ["delete", "--force", "proxyflare-1"]).exit_code == 0
+
+    assert saved_names(path) == []
+
+
+def test_delete_keeps_worker_in_file_when_api_fails(mock_ctx, tmp_path):
+    path = make_workers_file(tmp_path / "w.json", "proxyflare-1")
+    mock_ctx.service.delete_worker.side_effect = RuntimeError("API Error")
+
+    args = ["delete", "--force", "proxyflare-1", "--workers-file", str(path)]
+    assert runner.invoke(app, args).exit_code == 1
+
+    assert saved_names(path) == ["proxyflare-1"]
+
+
+def test_delete_all_keeps_failed_workers_in_file(mock_ctx, tmp_path):
+    path = make_workers_file(tmp_path / "w.json", "proxyflare-ok", "proxyflare-fail", "other")
+    mock_ctx.service.list_workers.return_value = [
+        {"id": "proxyflare-ok"},
+        {"id": "proxyflare-fail"},
+    ]
+    mock_ctx.service.delete_worker.side_effect = [None, RuntimeError("API Error")]
+
+    args = ["delete", "--all", "--force", "--workers-file", str(path)]
+    assert runner.invoke(app, args).exit_code == 1
+
+    assert saved_names(path) == ["proxyflare-fail", "other"]
+
+
+def test_delete_succeeds_when_workers_file_is_invalid(mock_ctx, tmp_path):
+    """The worker is gone from Cloudflare, so a broken local file is only a warning."""
+    path = tmp_path / "w.json"
+    path.write_text("not json")
+
+    args = ["delete", "--force", "proxyflare-1", "--workers-file", str(path)]
+    assert runner.invoke(app, args).exit_code == 0
+
+    assert path.read_text() == "not json"
+
+
 def test_delete_all_partial_failure(mock_ctx):
     """If some deletions fail, report both succeeded and failed counts."""
     mock_ctx.service.list_workers.return_value = [
@@ -161,8 +237,10 @@ def test_delete_all_partial_failure(mock_ctx):
         patch("proxyflare.cli.commands.delete.err_console", c),
         patch("proxyflare.cli.console.err_console", c),
     ):
-        runner.invoke(app, ["delete", "--all", "--force"])
+        result = runner.invoke(app, ["delete", "--all", "--force"])
 
+    assert result.exit_code == 1
+    assert "Failed to delete 1 worker(s)" in str(result.exception)
     output = strip_ansi(buf.getvalue())
     assert "Deleted 1 worker(s)" in output
-    assert "Failed to delete 1 worker(s)" in output
+    assert "Failed to delete proxyflare-fail" in output

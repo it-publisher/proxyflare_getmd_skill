@@ -87,6 +87,24 @@ def test_record_repr_hides_the_key():
     assert "secret-key" not in repr(make_record())
 
 
+def test_parse_error_does_not_reveal_keys(tmp_path):
+    record = {"name": "w", "url": "https://w.dev", "type": "python", "created_at": 1.0}
+    record["key"] = "secret-key"
+    with pytest.raises(ValueError, match="Failed to parse") as exc_info:
+        ProxyflareWorkersManager(write_workers_file(tmp_path, [record]))
+    assert "secret-key" not in str(exc_info.value)
+
+
+def test_load_or_empty_treats_missing_file_as_empty(tmp_path):
+    assert WorkerResultFile.load_or_empty(tmp_path / "missing.json").root == []
+
+
+def test_save_creates_parent_directory_and_leaves_no_temp_file(tmp_path):
+    path = tmp_path / "new" / "workers.json"
+    WorkerResultFile(root=[make_record()]).save(path)
+    assert [item.name for item in path.parent.iterdir()] == ["workers.json"]
+
+
 def test_saved_file_is_readable_only_by_owner(tmp_path):
     path = tmp_path / "workers.json"
     path.write_text("[]")

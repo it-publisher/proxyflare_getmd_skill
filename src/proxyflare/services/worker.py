@@ -4,7 +4,7 @@ import time
 from importlib import resources
 from typing import Any
 
-from cloudflare import AsyncCloudflare
+from cloudflare import AsyncCloudflare, NotFoundError
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -50,7 +50,8 @@ class WorkerService:
     async def ensure_subdomain(self) -> str:
         """
         Check that a workers.dev subdomain exists for the account.
-        Raises RuntimeError if not configured — never auto-provisions.
+        Raises SubdomainMissingError if not configured — never auto-provisions.
+        Other API errors, such as a rejected token, propagate as they are.
         """
         if self._subdomain:
             return self._subdomain
@@ -60,7 +61,7 @@ class WorkerService:
             if subdomain_info and subdomain_info.subdomain:
                 self._subdomain = subdomain_info.subdomain
                 return self._subdomain
-        except Exception as e:
+        except NotFoundError as e:
             logger.debug(f"Could not get subdomain: {e}")
 
         raise SubdomainMissingError(
@@ -80,7 +81,11 @@ class WorkerService:
         random_suffix = "".join(secrets.choice(string.ascii_lowercase) for _ in range(6))
         return f"{self.worker_prefix}-{timestamp}-{random_suffix}"
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True,
+    )
     async def deploy_worker(
         self,
         config: DeploymentConfig,
@@ -193,6 +198,9 @@ class WorkerService:
             await self.client.workers.scripts.delete(
                 script_name=name, account_id=self.account_id, force=True
             )
+        except NotFoundError:
+            # The goal is that the worker doesn't exist, and it already doesn't
+            logger.debug(f"Worker {name} was already deleted")
         except Exception as e:
             logger.error(f"Failed to delete worker {name}: {e}")
             raise RuntimeError(f"Failed to delete worker {name}: {e}") from e
