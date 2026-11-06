@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from proxyflare.constants import WorkerType
 
@@ -11,4 +11,5 @@ class DeploymentConfig(BaseModel):
     name: str
     script_content: str
     worker_type: WorkerType
+    key: str = Field(repr=False)
     wasm_content: bytes | None = None

@@ -85,14 +85,11 @@ select = [
     "S603",  # Subprocess untrusted input in tests
     "S607",  # Partial executable path in tests
 ]
-"src/proxyflare/workers/**/*.py" = ["ANN401"]
-"src/proxyflare/workers/**/*.pyi" = ["ANN401"]
-"src/proxyflare/utils/artifacts.py" = ["S603"]
 "src/proxyflare/scripts/**/*.py" = ["T20", "S603", "S607", "ANN201"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests/unit", "tests/workers"]
+testpaths = ["tests/unit"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -103,7 +100,8 @@ addopts = [
     "--cov=proxyflare",
 ]
 markers = [
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "contract: runs a worker locally through wrangler (run with `pytest tests/contract --no-cov`)",
+    "remote: deploys real workers to Cloudflare (run with `pytest tests/remote --no-cov`)",
 ]
 
 [tool.coverage.run]

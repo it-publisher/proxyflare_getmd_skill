@@ -1,29 +1,29 @@
 import secrets
 from pathlib import Path
 
-from proxyflare.models.worker_result import WorkerResultFile
+from proxyflare.models.worker_result import WorkerRecord, WorkerResultFile
 
 __all__ = ["ProxyflareWorkersManager"]
 
 
 class ProxyflareWorkersManager:
     """
-    Manages a list of Proxyflare worker URLs.
-    Can load valid workers from a JSON file (created by `proxyflare create`)
-    or accept a direct list of URLs.
+    Manages a pool of Proxyflare workers.
+    Can load workers from a JSON file (created by `proxyflare create`)
+    or accept a direct list of records.
     """
 
-    def __init__(self, source: str | Path | list[str]) -> None:
+    def __init__(self, source: str | Path | list[WorkerRecord]) -> None:
         """
         Initialize the manager with worker sources.
 
         Args:
-            source: A list of URLs, a path to a JSON file, or a string path.
+            source: A list of worker records, or a path to a JSON file.
 
         Raises:
             ValueError: If no workers are found.
         """
-        self.workers: list[str] = []
+        self.workers: list[WorkerRecord] = []
 
         if isinstance(source, list):
             self.workers = source
@@ -41,13 +41,12 @@ class ProxyflareWorkersManager:
 
         try:
             data = file_path.read_text(encoding="utf-8")
-            result_file = WorkerResultFile.model_validate_json(data)
-            self.workers = [record.url for record in result_file.root]
+            self.workers = WorkerResultFile.model_validate_json(data).root
         except Exception as e:
             raise ValueError(f"Failed to parse worker file: {e}") from e
 
-    def get_worker(self) -> str:
-        """Return a random worker URL."""
+    def get_worker(self) -> WorkerRecord:
+        """Return a random worker."""
         if not self.workers:
             raise ValueError("No workers available.")
         return secrets.choice(self.workers)

@@ -61,7 +61,6 @@ build/
 docs/_build/
 site/
 
-docs/
 .agent/
 .wrangler/
 .opencode/

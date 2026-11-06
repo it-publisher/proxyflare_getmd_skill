@@ -1,98 +1,59 @@
+import time
 import uuid
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 
 import httpx
 import pytest
 from cloudflare import AsyncCloudflare
-from rich.console import Console
 from tenacity import retry, stop_after_delay, wait_exponential
 
+from proxyflare.constants import WORKER_KEY_BYTES
 from proxyflare.models.config import Config
 from proxyflare.models.deployment import DeploymentConfig
+from proxyflare.models.worker_result import WorkerRecord
 from proxyflare.services.worker import WorkerService
 
-console = Console()
 
-
-@retry(stop=stop_after_delay(60), wait=wait_exponential(multiplier=1, min=4, max=10))
+@retry(stop=stop_after_delay(60), wait=wait_exponential(multiplier=1, min=4, max=10), reraise=True)
 async def wait_for_worker(url: str) -> None:
-    """Poll the worker until it returns 200 or 400 (bad request is ok for root)."""
+    """Poll until the worker answers. Without a key it replies 401; 404 means not propagated yet."""
     async with httpx.AsyncClient() as client:
-        try:
-            # We filter for query param 'url', so a raw GET should return 400 if working
-            # or 200 if the worker logic permits.
-            # 404 means it's not propagated yet.
-            response = await client.get(url)
-            if response.status_code not in (200, 400):
-                raise RuntimeError(f"Worker not ready: {response.status_code}")
-        except httpx.RequestError as e:
-            raise RuntimeError(f"Worker not reachable: {e}") from e
+        response = await client.get(url)
+    if response.status_code != 401:
+        raise RuntimeError(f"Worker not ready: {response.status_code}")
 
 
 @pytest.fixture(scope="session")
 def config() -> Config:
-    """Yields a loaded Config object."""
     try:
-        return Config()  # type: ignore
+        return Config()  # ty: ignore[missing-argument]
     except Exception as e:
         pytest.skip(f"Configuration not valid: {e}")
 
 
-@pytest.fixture(scope="session")
-def cloudflare_client(config: Config) -> Generator[AsyncCloudflare, None, None]:
-    """Yields an authenticated Cloudflare client."""
-    yield AsyncCloudflare(api_token=config.api_token.get_secret_value())
+@pytest.fixture(params=["js", "rust"])
+async def deployed_worker(request, config: Config) -> AsyncGenerator[WorkerRecord, None]:
+    """Deploy a real worker, yield its record and delete it afterwards."""
+    worker_type = request.param
+    async with AsyncCloudflare(api_token=config.api_token.get_secret_value()) as client:
+        service = WorkerService(client, config.account_id)
+        script_content, wasm_content = service.get_worker_source(worker_type)
+        name = f"proxyflare-e2e-{worker_type}-{uuid.uuid4().hex[:8]}"
+        key = uuid.uuid4().hex * (WORKER_KEY_BYTES // 16)
 
-
-@pytest.fixture(scope="session")
-def worker_service(
-    cloudflare_client: AsyncCloudflare, config: Config
-) -> Generator[WorkerService, None, None]:
-    """Yields a WorkerService instance."""
-    yield WorkerService(client=cloudflare_client, account_id=config.account_id)
-
-
-@pytest.fixture(scope="session")
-async def worker_base_url(worker_service: WorkerService) -> AsyncGenerator[str, None]:
-    """
-    Fixture that:
-    1. Deploys a worker using WorkerService.
-    2. Yields the URL.
-    3. Deletes the worker after tests.
-    """
-    # Generate a unique name
-    unique_id = uuid.uuid4().hex[:8]
-    worker_name = f"proxyflare-e2e-test-{unique_id}"
-
-    console.print(f"\n[bold blue]Deploying test worker: {worker_name}[/bold blue]")
-
-    # Ensure rust artifacts are built before attempting to deploy
-    from proxyflare.utils.artifacts import build_rust_worker
-
-    build_rust_worker(verbose=False)
-
-    # Get worker source
-    script_content, wasm_content = worker_service.get_worker_source("rust")
-
-    config = DeploymentConfig(
-        name=worker_name,
-        script_content=script_content,
-        worker_type="rust",
-        wasm_content=wasm_content,
-    )
-
-    try:
-        url = await worker_service.deploy_worker(config)
-        console.print(f"[bold green]Worker deployed at: {url}[/bold green]")
-
-        console.print("[bold blue]Waiting for propagation...[/bold blue]")
-        await wait_for_worker(url)
-        console.print("[bold green]Worker is ready![/bold green]")
-
-        yield url
-
-    finally:
         try:
-            await worker_service.delete_worker(worker_name)
-        except Exception as e:
-            console.print(f"[bold red]Failed to delete worker {worker_name}: {e}[/bold red]")
+            url = await service.deploy_worker(
+                DeploymentConfig(
+                    name=name,
+                    script_content=script_content,
+                    worker_type=worker_type,
+                    key=key,
+                    wasm_content=wasm_content,
+                )
+            )
+            await wait_for_worker(url)
+            yield WorkerRecord(
+                name=name, url=url, type=worker_type, created_at=time.time(), key=key
+            )
+        finally:
+            await service.delete_worker(name)

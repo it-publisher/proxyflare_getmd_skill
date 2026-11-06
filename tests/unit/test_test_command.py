@@ -19,8 +19,9 @@ def workers_file(tmp_path):
         {
             "name": "proxyflare-test-1",
             "url": "https://proxyflare-test-1.example.workers.dev",
-            "type": "python",
+            "type": "js",
             "created_at": 1700000000.0,
+            "key": "test-key",
         }
     ]
     filepath = tmp_path / "workers.json"

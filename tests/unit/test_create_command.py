@@ -31,7 +31,7 @@ def mock_ctx(tmp_path):
     mock_config.api_token.get_secret_value.return_value = "test-token"
     mock_config.account_id = "test-account-id"
     mock_config.worker_prefix = "proxyflare"
-    mock_config.worker_type = "python"
+    mock_config.worker_type = "js"
 
     mock_app_ctx = MagicMock()
     mock_app_ctx.config = mock_config
@@ -70,7 +70,11 @@ def test_create_single_worker(mock_ctx):
     assert len(data) == 1
     assert data[0]["name"] == "proxyflare-123-abc"
     assert data[0]["url"] == "https://proxyflare-123-abc.test-sub.workers.dev"
-    assert data[0]["type"] == "python"
+    assert data[0]["type"] == "js"
+
+    deployed_config = ctx.service.deploy_worker.call_args.args[0]
+    assert len(data[0]["key"]) >= 32
+    assert deployed_config.key == data[0]["key"]
 
     ctx.service.deploy_worker.assert_called_once()
 
@@ -112,7 +116,7 @@ def test_create_source_not_found(mock_ctx):
     ctx, tmp_path = mock_ctx
     result_path = tmp_path / "result.json"
 
-    ctx.service.get_worker_source.side_effect = FileNotFoundError("Python worker not found")
+    ctx.service.get_worker_source.side_effect = FileNotFoundError("JS worker not found")
 
     result = runner.invoke(app, ["create", "--result", str(result_path)])
 

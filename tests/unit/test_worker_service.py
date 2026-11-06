@@ -72,34 +72,6 @@ def test_generate_worker_name_custom_prefix(mock_client):
 # --- deploy_worker ---
 
 
-async def test_deploy_worker_python(service, mock_client):
-    service.ensure_subdomain = AsyncMock(return_value="test-sub")
-
-    config = DeploymentConfig(
-        name="test-worker",
-        script_content="print('hello')",
-        worker_type="python",
-    )
-    url = await service.deploy_worker(config)
-
-    assert url == "https://test-worker.test-sub.workers.dev"
-
-    mock_client.workers.scripts.update.assert_called_once()
-    _, kwargs = mock_client.workers.scripts.update.call_args
-    assert kwargs["account_id"] == "test-account"
-    assert kwargs["script_name"] == "test-worker"
-    assert kwargs["metadata"]["main_module"] == "worker.py"
-    assert kwargs["files"]["worker.py"] == (
-        "worker.py",
-        b"print('hello')",
-        "text/x-python",
-    )
-
-    mock_client.workers.scripts.subdomain.create.assert_called_once_with(
-        account_id="test-account", script_name="test-worker", enabled=True
-    )
-
-
 async def test_deploy_worker_rust(service, mock_client):
     service.ensure_subdomain = AsyncMock(return_value="test-sub")
 
@@ -107,6 +79,7 @@ async def test_deploy_worker_rust(service, mock_client):
         name="rust-worker",
         script_content="shim",
         worker_type="rust",
+        key="test-key",
         wasm_content=b"wasmbytes",
     )
     await service.deploy_worker(config)
@@ -132,7 +105,8 @@ async def test_deploy_worker_failure(service, mock_client):
     config = DeploymentConfig(
         name="test",
         script_content="content",
-        worker_type="python",
+        worker_type="js",
+        key="test-key",
     )
     with pytest.raises(RetryError):
         await service.deploy_worker(config)
@@ -239,17 +213,24 @@ async def test_deploy_worker_js(service, mock_client):
         name="js-worker",
         script_content="addEventListener('fetch'...)",
         worker_type="js",
+        key="secret-key",
     )
     url = await service.deploy_worker(config)
 
     assert url == "https://js-worker.test-sub.workers.dev"
 
     _, kwargs = mock_client.workers.scripts.update.call_args
+    assert kwargs["account_id"] == "test-account"
+    assert kwargs["script_name"] == "js-worker"
     assert kwargs["metadata"]["main_module"] == "worker.js"
     assert kwargs["files"]["worker.js"] == (
         "worker.js",
         b"addEventListener('fetch'...)",
         "application/javascript+module",
     )
-    # JS should not have python_workers flag
-    assert kwargs["metadata"]["compatibility_flags"] == []
+    assert kwargs["metadata"]["bindings"] == [
+        {"type": "secret_text", "name": "PROXYFLARE_KEY", "text": "secret-key"}
+    ]
+    mock_client.workers.scripts.subdomain.create.assert_called_once_with(
+        account_id="test-account", script_name="js-worker", enabled=True
+    )

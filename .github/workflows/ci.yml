@@ -44,6 +44,22 @@ jobs:
           grep -q 'workers/rust/build/index.js' <<< "$contents"
           grep -q 'workers/rust/build/index_bg.wasm' <<< "$contents"
 
+  worker-contract:
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_RUST_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra dev
+      - run: uv run pytest tests/contract --no-cov
+
   telegram-bot:
     runs-on: ubuntu-latest
     defaults:

@@ -1,7 +1,7 @@
-from typing import Literal
-
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from proxyflare.constants import DEFAULT_WORKER_TYPE, WorkerType
 
 __all__ = ["Config"]
 
@@ -19,7 +19,7 @@ class Config(BaseSettings):
     api_token: SecretStr
     """Cloudflare API token."""
 
-    worker_type: Literal["python", "rust", "js"] = "python"
+    worker_type: WorkerType = DEFAULT_WORKER_TYPE
     """Default worker type to create if not specified."""
 
     worker_prefix: str = "proxyflare"

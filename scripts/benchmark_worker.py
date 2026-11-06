@@ -8,6 +8,8 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 from rich.table import Table
 
+from proxyflare.constants import WORKER_KEY_HEADER
+
 app = typer.Typer()
 console = Console()
 
@@ -24,7 +26,7 @@ async def fetch(client: httpx.AsyncClient, url: str) -> tuple[int, float]:
 
 
 async def run_benchmark(
-    worker_url: str, target_url: str, concurrency: int, total_requests: int
+    worker_url: str, key: str, target_url: str, concurrency: int, total_requests: int
 ) -> None:
     full_url = f"{worker_url}/?url={target_url}"
     console.print(f"[bold blue]Starting benchmark against:[/bold blue] {full_url}")
@@ -36,10 +38,7 @@ async def run_benchmark(
 
     start_time = time.perf_counter()
 
-    async with httpx.AsyncClient() as client:
-        # Check connectivity first (optional, skipping to avoid delay on fail)
-        pass
-
+    async with httpx.AsyncClient(headers={WORKER_KEY_HEADER: key}) as client:
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -104,6 +103,7 @@ async def run_benchmark(
 @app.command()
 def main(
     worker_url: str = typer.Option("http://localhost:8787", help="URL of the worker"),
+    key: str = typer.Option(..., envvar="PROXYFLARE_WORKER_KEY", help="Key of the worker"),
     target_url: str = typer.Option("https://httpbin.org/get", help="Target URL to proxy"),
     concurrency: int = typer.Option(50, help="Number of concurrent requests"),
     requests: int = typer.Option(1000, help="Total number of requests to make"),
@@ -112,7 +112,7 @@ def main(
     Run a benchmark against the Proxyflare worker.
     """
     try:
-        asyncio.run(run_benchmark(worker_url, target_url, concurrency, requests))
+        asyncio.run(run_benchmark(worker_url, key, target_url, concurrency, requests))
     except KeyboardInterrupt:
         console.print("[red]Benchmark interrupted[/red]")
 
